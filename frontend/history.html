@@ -1,0 +1,48 @@
+<!-- TEAM: Frontend -->
+<!-- Session history page for viewing past medical appointments -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session History - Sidekick</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1>🏥 Sidekick - Session History</h1>
+        <nav>
+            <a href="index.html">← Back to App</a>
+        </nav>
+    </header>
+
+    <main class="history-container">
+        <h2>Past Sessions</h2>
+        <div id="sessions-list" class="sessions-list">
+            <!-- Session list will be populated here -->
+        </div>
+
+        <!-- Session Detail View -->
+        <div id="session-detail" class="session-detail hidden">
+            <button id="back-to-list" class="btn btn-secondary">← Back to List</button>
+            <div id="session-detail-content">
+                <!-- Session details will be displayed here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete this session? This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button id="confirm-delete" class="btn btn-danger">Delete</button>
+                <button id="cancel-delete" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/history.js"></script>
+</body>
+</html>

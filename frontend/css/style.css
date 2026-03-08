@@ -1,0 +1,108 @@
+/* TEAM: Frontend */
+/* Styles for Sidekick Medical Assistant */
+
+/* TODO: Implement medical-themed color scheme with high contrast */
+/* TODO: Style three-panel layout with flexbox/grid */
+/* TODO: Style recording indicator with pulsing animation */
+/* TODO: Style simplified terms with term highlighting */
+/* TODO: Style suggested questions as numbered list */
+/* TODO: Style translation panel */
+/* TODO: Style summary modal */
+/* TODO: Implement responsive layout (min-width 768px) */
+/* TODO: Add smooth animations for new content */
+/* TODO: Style buttons (primary, secondary, danger) */
+/* TODO: Style error messages */
+/* TODO: Add loading indicators */
+/* TODO: Add accessibility styles (focus indicators, high contrast) */
+
+:root {
+    --primary-color: #2563eb;
+    --secondary-color: #64748b;
+    --danger-color: #dc2626;
+    --success-color: #16a34a;
+    --background: #f8fafc;
+    --surface: #ffffff;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --border: #e2e8f0;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: var(--background);
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+/* Header styles */
+header {
+    background-color: var(--surface);
+    padding: 1rem 2rem;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Main layout - TODO: Implement three-panel layout */
+.app-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1rem;
+    height: calc(100vh - 200px);
+}
+
+/* Panels - TODO: Style each panel */
+.transcript-panel,
+.info-panel {
+    background-color: var(--surface);
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Recording indicator - TODO: Add pulsing animation */
+.recording-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background-color: var(--danger-color);
+    border-radius: 50%;
+}
+
+/* Buttons - TODO: Style all button variants */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+/* Utility classes */
+.hidden {
+    display: none;
+}
+
+/* TODO: Add responsive styles for tablet/desktop */
+@media (min-width: 768px) {
+    /* Responsive layout adjustments */
+}

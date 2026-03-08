@@ -1,0 +1,411 @@
+# Sidekick – AI Medical Appointment Assistant
+
+A real-time AI-powered web app that listens to doctor–patient conversations, simplifies medical terminology, suggests clarification questions, generates visit summaries, and optionally translates into the patient's language.
+
+---
+
+## 1. System Architecture
+
+```mermaid
+graph TD
+    subgraph Browser ["Browser (Frontend)"]
+        MIC[🎤 Microphone Input]
+        UI[Real-Time UI Panel]
+        SUM[Visit Summary View]
+    end
+
+    subgraph Server ["FastAPI Backend"]
+        WS[WebSocket Handler]
+        STT[Speech-to-Text<br/>Web Speech API]
+        LLM[LLM Engine<br/>Google Gemini API]
+        DB[(SQLite Database)]
+    end
+
+    MIC -->|Audio stream / text| WS
+    WS -->|Transcript chunks| LLM
+    LLM -->|Simplified terms<br/>Questions<br/>Translations| WS
+    WS -->|Real-time updates| UI
+    WS -->|End session| SUM
+    LLM -->|Summary| DB
+    WS -->|Save transcript| DB
+```
+
+### How it works
+1. **Browser captures speech** via the Web Speech API (SpeechRecognition) — no server-side STT needed.
+2. **Transcript chunks** are sent over a WebSocket to the FastAPI backend.
+3. **Backend calls Google Gemini** (free tier) to simplify medical terms, suggest questions, and optionally translate.
+4. **Results stream back** via WebSocket to the frontend in real time.
+5. At session end, a **structured visit summary** is generated and stored in SQLite.
+
+> [!NOTE]
+> Speech recognition runs entirely in the browser (Web Speech API), keeping the backend lightweight. The Gemini API free tier provides 15 RPM / 1M tokens per day — more than enough for an MVP demo.
+
+---
+
+## 2. Tech Stack
+
+| Layer | Technology | Rationale |
+|-------|-----------|-----------|
+| **Frontend** | Vanilla HTML + CSS + JS | Zero build step, fast iteration |
+| **Speech-to-Text** | Web Speech API (`SpeechRecognition`) | Built into Chrome/Edge, free, real-time |
+| **Backend** | Python + FastAPI | Async, WebSocket-native, fast to develop |
+| **AI / LLM** | Google Gemini API (gemini-2.0-flash) | Free tier, excellent medical understanding |
+| **Database** | SQLite via `aiosqlite` | Zero setup, file-based, perfect for MVP |
+| **Translation** | Gemini (same LLM call) | One model handles simplification + translation |
+| **Deployment** | Local (uvicorn) | Simple, no cloud costs |
+
+---
+
+## 3. Development Roadmap (3–5 Days)
+
+| Day | Tasks |
+|-----|-------|
+| **Day 1** | Project scaffold, backend skeleton, WebSocket endpoint, SQLite schema |
+| **Day 2** | Gemini integration — medical term simplifier, question engine, translation |
+| **Day 3** | Frontend UI — live transcript, simplified terms panel, question suggestions |
+| **Day 4** | Visit summary generator, session history page, polish |
+| **Day 5** | Testing, bug fixes, demo recording, README |
+
+---
+
+## 4. Component Breakdown
+
+### 4.1 Speech Recognition Module
+- **Implementation**: Browser-side `webkitSpeechRecognition` / `SpeechRecognition`
+- Runs in `continuous` + `interimResults` mode
+- Sends final transcript segments to backend via WebSocket
+- Displays live transcript in the UI
+
+### 4.2 Medical Terminology Simplifier
+- **Implementation**: Gemini API prompt that receives transcript chunks
+- Detects medical/clinical terms and returns plain-language explanations
+- Example: *"hypertension"* → *"high blood pressure"*
+
+### 4.3 Question Suggestion Engine
+- **Implementation**: Gemini API prompt that analyzes conversation context
+- Suggests 2–3 follow-up questions the patient could ask
+- Updates as the conversation progresses
+
+### 4.4 Real-Time Explanation Interface
+- **Implementation**: WebSocket pushes updates to the frontend panel
+- Three live-updating panels: Transcript, Simplified Terms, Suggested Questions
+- Optional translation toggle
+
+### 4.5 Visit Summary Generator
+- **Implementation**: On session end, full transcript is sent to Gemini
+- Returns structured summary: diagnosis, medications, instructions, follow-ups
+- Saved to SQLite and displayed in the UI
+
+---
+
+## 5. API Design
+
+### REST Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Serve the main app page |
+| `GET` | `/api/sessions` | List all past sessions |
+| `GET` | `/api/sessions/{id}` | Get session detail + summary |
+| `DELETE` | `/api/sessions/{id}` | Delete a session |
+
+### WebSocket Endpoint
+
+| Endpoint | Direction | Message Format |
+|----------|-----------|---------------|
+| `ws://localhost:8000/ws/session` | Client → Server | `{"type": "transcript", "text": "...", "language": "en"}` |
+| | Client → Server | `{"type": "end_session"}` |
+| | Server → Client | `{"type": "simplification", "terms": [...]}` |
+| | Server → Client | `{"type": "questions", "suggestions": [...]}` |
+| | Server → Client | `{"type": "translation", "text": "..."}` |
+| | Server → Client | `{"type": "summary", "data": {...}}` |
+
+---
+
+## 6. Database Schema (SQLite)
+
+```sql
+CREATE TABLE sessions (
+    id          TEXT PRIMARY KEY,
+    title       TEXT,
+    language    TEXT DEFAULT 'en',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ended_at    DATETIME
+);
+
+CREATE TABLE transcript_chunks (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT REFERENCES sessions(id),
+    text        TEXT NOT NULL,
+    timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE simplifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT REFERENCES sessions(id),
+    term        TEXT,
+    explanation TEXT,
+    timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE summaries (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT REFERENCES sessions(id) UNIQUE,
+    diagnosis   TEXT,
+    medications TEXT,
+    instructions TEXT,
+    follow_up   TEXT,
+    full_summary TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## 7. Prompt Engineering Examples
+
+### Medical Term Simplifier Prompt
+```
+You are a medical language simplifier. Given the following doctor–patient
+conversation excerpt, identify ALL medical or clinical terms and explain
+each in simple, patient-friendly language.
+
+Transcript: "{transcript_chunk}"
+
+Respond in this exact JSON format:
+{
+  "terms": [
+    {"term": "medical term", "explanation": "simple explanation"}
+  ]
+}
+If there are no medical terms, return {"terms": []}.
+```
+
+### Question Suggestion Prompt
+```
+You are a patient advocate. Based on this doctor–patient conversation,
+suggest 2-3 clarification questions the patient could ask to better
+understand their condition and treatment.
+
+Conversation so far:
+"{full_transcript}"
+
+Respond in this exact JSON format:
+{
+  "questions": [
+    "Question 1?",
+    "Question 2?",
+    "Question 3?"
+  ]
+}
+```
+
+### Visit Summary Prompt
+```
+You are a medical visit summarizer. Create a structured summary of this
+doctor–patient conversation.
+
+Full transcript:
+"{full_transcript}"
+
+Respond in this exact JSON format:
+{
+  "title": "Brief visit title",
+  "diagnosis": "Main diagnosis or concern discussed",
+  "medications": ["medication 1", "medication 2"],
+  "instructions": ["instruction 1", "instruction 2"],
+  "follow_up": "Follow-up plan",
+  "key_points": ["key point 1", "key point 2"]
+}
+```
+
+### Translation Prompt
+```
+Translate the following medical explanation into {target_language}.
+Keep it simple and patient-friendly. Do not use technical jargon.
+
+Text: "{text}"
+
+Respond with only the translated text.
+```
+
+---
+
+## 8. UI Layout
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  🏥  Sidekick – AI Medical Assistant          [History]  │
+├────────────────────┬─────────────────────────────────────┤
+│                    │                                     │
+│  📝 Live           │  💡 Simplified Terms                │
+│  Transcript        │                                     │
+│                    │  • hypertension → high blood         │
+│  Doctor:           │    pressure                          │
+│  "Your BP is       │  • BP → blood pressure               │
+│  elevated, we      │  • ACE inhibitor → a type of         │
+│  may need to       │    blood pressure medicine            │
+│  start an ACE      │                                     │
+│  inhibitor..."     ├─────────────────────────────────────┤
+│                    │                                     │
+│                    │  ❓ Questions You Could Ask          │
+│                    │                                     │
+│                    │  • What are the side effects of      │
+│                    │    ACE inhibitors?                   │
+│                    │  • Are there lifestyle changes       │
+│                    │    that could help?                  │
+│                    │  • How often should I monitor        │
+│                    │    my blood pressure?                │
+│                    │                                     │
+├────────────────────┴─────────────────────────────────────┤
+│  🌐 Translate to: [Hindi ▼]    [🔴 Recording] [■ Stop]  │
+│  🔄 Translation: "आपका रक्तचाप बढ़ा हुआ है..."          │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 9. Project / Folder Structure
+
+```
+Mini project2/
+├── backend/
+│   ├── main.py              # FastAPI app, routes, WebSocket
+│   ├── gemini_service.py    # Gemini API integration
+│   ├── database.py          # SQLite setup + queries
+│   ├── models.py            # Pydantic models
+│   └── requirements.txt     # Python dependencies
+├── frontend/
+│   ├── index.html           # Main app page
+│   ├── history.html         # Session history page
+│   ├── css/
+│   │   └── style.css        # All styles
+│   └── js/
+│       ├── app.js           # Main app logic + WebSocket
+│       ├── speech.js        # Web Speech API wrapper
+│       └── ui.js            # DOM manipulation helpers
+├── .env                     # GEMINI_API_KEY
+└── README.md                # Setup & usage instructions
+```
+
+---
+
+## 10. Deployment Plan
+
+### Local Development (Primary)
+```bash
+# 1. Install Python dependencies
+cd backend
+pip install -r requirements.txt
+
+# 2. Set API key
+echo "GEMINI_API_KEY=your_key_here" > ../.env
+
+# 3. Run the server
+uvicorn main:app --reload --port 8000
+
+# 4. Open browser
+# http://localhost:8000
+```
+
+FastAPI serves both the API and static frontend files — no separate frontend server needed.
+
+### Optional Cloud Deployment
+- **Render.com** (free tier) or **Railway** for hosting
+- SQLite file persists on disk (or swap to Supabase PostgreSQL for prod)
+- Set `GEMINI_API_KEY` as environment variable
+
+---
+
+## 11. Optional Advanced Features
+
+| Feature | Complexity | Impact |
+|---------|-----------|--------|
+| Speaker diarization (doctor vs patient) | Medium | High — separate who said what |
+| Medication interaction warnings | Low | High — flag known drug interactions |
+| PDF export of visit summary | Low | Medium — downloadable summary |
+| Voice playback of simplified explanations | Low | Medium — accessibility |
+| Multi-language UI (i18n) | Medium | Medium — broader audience |
+| Symptom timeline visualization | Medium | High — visual conversation mapping |
+| Dark mode | Low | Low — aesthetic polish |
+
+---
+
+## Proposed Changes
+
+### Backend Component
+
+#### [NEW] [requirements.txt](file:///c:/Users/HP/Downloads/Mini%20project2/backend/requirements.txt)
+Python dependencies: `fastapi`, `uvicorn`, `aiosqlite`, `google-generativeai`, `python-dotenv`, `websockets`.
+
+#### [NEW] [main.py](file:///c:/Users/HP/Downloads/Mini%20project2/backend/main.py)
+FastAPI application with:
+- Static file serving for frontend
+- REST endpoints for session history
+- WebSocket endpoint for real-time transcript processing
+
+#### [NEW] [gemini_service.py](file:///c:/Users/HP/Downloads/Mini%20project2/backend/gemini_service.py)
+Gemini API wrapper with methods: `simplify_terms()`, `suggest_questions()`, `generate_summary()`, `translate_text()`.
+
+#### [NEW] [database.py](file:///c:/Users/HP/Downloads/Mini%20project2/backend/database.py)
+Async SQLite helper: `init_db()`, CRUD for sessions, transcript chunks, and summaries.
+
+#### [NEW] [models.py](file:///c:/Users/HP/Downloads/Mini%20project2/backend/models.py)
+Pydantic models for API responses and WebSocket message schemas.
+
+---
+
+### Frontend Component
+
+#### [NEW] [index.html](file:///c:/Users/HP/Downloads/Mini%20project2/frontend/index.html)
+Main app page with live transcript, simplified terms panel, question suggestions, translation toggle, and recording controls.
+
+#### [NEW] [history.html](file:///c:/Users/HP/Downloads/Mini%20project2/frontend/history.html)
+Session history page showing past sessions with summaries.
+
+#### [NEW] [style.css](file:///c:/Users/HP/Downloads/Mini%20project2/frontend/css/style.css)
+Full design system with dark-themed medical UI, glassmorphism cards, smooth animations, responsive layout.
+
+#### [NEW] [app.js](file:///c:/Users/HP/Downloads/Mini%20project2/frontend/js/app.js)
+WebSocket connection management, message routing, session lifecycle.
+
+#### [NEW] [speech.js](file:///c:/Users/HP/Downloads/Mini%20project2/frontend/js/speech.js)
+Web Speech API wrapper with continuous recognition, interim results display, error handling.
+
+#### [NEW] [ui.js](file:///c:/Users/HP/Downloads/Mini%20project2/frontend/js/ui.js)
+DOM helpers for updating transcript, terms, questions, and translation panels.
+
+---
+
+### Configuration
+
+#### [NEW] [.env](file:///c:/Users/HP/Downloads/Mini%20project2/.env)
+Environment variables: `GEMINI_API_KEY`.
+
+#### [NEW] [README.md](file:///c:/Users/HP/Downloads/Mini%20project2/README.md)
+Project overview, setup instructions, usage guide, screenshots placeholder.
+
+---
+
+## Verification Plan
+
+### Automated / Script-Based Testing
+1. **Backend startup test**: Run `cd backend && python -c "from main import app; print('OK')"` to verify imports.
+2. **Database initialization test**: Run the app and verify `sidekick.db` is created with correct tables.
+3. **Gemini connectivity test**: Run a small script to verify the API key works and Gemini responds.
+
+### Browser-Based Testing
+1. **Open `http://localhost:8000`** — verify the UI loads with all panels.
+2. **Click "Start Recording"** — verify the microphone permission prompt appears and transcript begins.
+3. **Speak a test sentence** with medical terms (e.g., "The patient has hypertension and needs an ACE inhibitor") — verify:
+   - Transcript appears in the left panel
+   - Simplified terms appear in the right panel
+   - Suggested questions appear below
+4. **Toggle translation** to Hindi — verify translated text appears.
+5. **Click "Stop Recording"** — verify visit summary is generated and displayed.
+6. **Navigate to History** — verify the session appears with its summary.
+
+### Manual Testing by User
+- Test with a real or simulated doctor–patient conversation
+- Verify the app works in Chrome or Edge (Web Speech API requirement)
+- Check that the Gemini responses are medically sensible and patient-friendly
