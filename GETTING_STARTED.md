@@ -576,7 +576,21 @@ git push origin feature/[team]-[task-name]
 
 ## ⚠️ Common Issues
 
-### Issue 1: Import Errors (Backend/AI)
+### Issue 1: CI Lint Check Failing
+
+**Problem:**
+```
+❌ Lint & Format Check failed
+```
+
+**Solution:**
+This is expected with skeleton code! The CI is configured to show warnings but not block merges.
+- Linting is **non-blocking** during initial development
+- Focus on implementing features first
+- Fix linting issues when code is complete
+- See `CI_FIX_GUIDE.md` for details
+
+### Issue 2: Import Errors (Backend/AI)
 
 **Problem:**
 ```python
