@@ -68,13 +68,18 @@ except ImportError:
         from gemini_service_mock import GeminiService
         logger.info("Using MOCK Gemini AI service (for testing)")
 
-if not GEMINI_API_KEY:
-    logger.critical("GEMINI_API_KEY environment variable is required")
-    sys.exit(1)
+# Check if we're running in test mode
+import sys
+TESTING = 'pytest' in sys.modules or 'unittest' in sys.modules
 
-if not DATABASE_URL:
-    logger.critical("DATABASE_URL environment variable is required")
-    sys.exit(1)
+if not TESTING:
+    if not GEMINI_API_KEY:
+        logger.critical("GEMINI_API_KEY environment variable is required")
+        sys.exit(1)
+
+    if not DATABASE_URL:
+        logger.critical("DATABASE_URL environment variable is required")
+        sys.exit(1)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -94,8 +99,13 @@ app.add_middleware(
 
 # Initialize services - must be done after loading env vars
 # Use SQLite-compatible database service
-db = DatabaseService(DATABASE_URL)
-gemini = GeminiService(GEMINI_API_KEY)
+# For tests, use default values if env vars are missing
+if TESTING:
+    db = DatabaseService(DATABASE_URL or "sqlite:///test.db")
+    gemini = GeminiService(GEMINI_API_KEY or "test-key")
+else:
+    db = DatabaseService(DATABASE_URL)
+    gemini = GeminiService(GEMINI_API_KEY)
 
 # Store active WebSocket connections and their session IDs
 active_connections: Dict[WebSocket, str] = {}
