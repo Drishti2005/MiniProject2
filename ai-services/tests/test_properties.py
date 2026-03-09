@@ -186,7 +186,10 @@ async def test_property_simplification_completeness(terms_data):
     ]
     
     mock_response = Mock()
-    mock_response.text = f'{{"terms": {str(valid_terms).replace("'", '"')}}}'
+    # Convert to JSON-compatible format
+    import json
+    terms_json = json.dumps(valid_terms)
+    mock_response.text = f'{{"terms": {terms_json}}}'
     
     with patch.object(service.model, 'generate_content', return_value=mock_response):
         result = await service.simplify_terms("test transcript")
