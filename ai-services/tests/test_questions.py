@@ -167,9 +167,11 @@ class TestSuggestQuestions:
         '''
         
         transcript = " ".join([
-            "First we discussed blood pressure.",
-            "Now we're talking about diabetes.",
-            "The patient has new symptoms."
+            "First we discussed blood pressure and how it has been elevated recently.",
+            "Now we're talking about diabetes management and blood sugar control.",
+            "The patient has new symptoms including fatigue and increased thirst.",
+            "We need to review the current medication regimen and make adjustments.",
+            "Follow-up appointments will be scheduled to monitor progress closely."
         ])
         
         with patch.object(service.model, 'generate_content', return_value=mock_response):
