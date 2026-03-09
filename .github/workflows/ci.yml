@@ -98,7 +98,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-ai-${{ hashFiles('ai-service/requirements.txt') }}
+          key: ${{ runner.os }}-pip-ai-${{ hashFiles('ai-services/requirements.txt') }}
       
       - name: Install dependencies
         run: |
