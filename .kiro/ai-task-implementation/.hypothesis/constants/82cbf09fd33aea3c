@@ -1,0 +1,4 @@
+# file: C:\Users\trive\Documents\MiniProject2\.kiro\ai-task-implementation\gemini_service.py
+# hypothesis_version: 6.151.9
+
+[0.0, 100, 'Medical Visit', '[REDACTED]', '```', '```json', 'diagnosis', 'explanation', 'follow_up', 'generate_summary', 'instructions', 'key_points', 'max_output_tokens', 'medications', 'questions', 'simplify_terms', 'slow_requests', 'suggest_questions', 'temperature', 'term', 'terms', 'title', 'total_requests', 'translate_text']
