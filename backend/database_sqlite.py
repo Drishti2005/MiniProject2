@@ -22,9 +22,17 @@ class DatabaseService:
         Args:
             connection_string: SQLite connection string
         """
+        import os
         self.connection_string = connection_string
         # Extract database path from SQLite connection string
         self.db_path = connection_string.replace('sqlite+aiosqlite:///', '')
+        
+        # Ensure directory exists
+        db_dir = os.path.dirname(self.db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+            logger.info(f"Created database directory: {db_dir}")
+        
         logger.info(f"Using SQLite database: {self.db_path}")
 
     async def init_db(self):
@@ -273,7 +281,7 @@ class DatabaseService:
             logger.error(f"Failed to get all sessions: {e}")
             raise
 
-    async def get_session_details(self, session_id: str) -> Dict:
+    async def get_session_details(self, session_id: str) -> Optional[Dict]:
         """
         Retrieve complete session data including transcript, simplifications, and summary
 
@@ -281,7 +289,7 @@ class DatabaseService:
             session_id: UUID of the session
 
         Returns:
-            Dictionary with session, transcript, simplifications, and summary
+            Dictionary with session, transcript, simplifications, and summary, or None if not found
         """
         try:
             async with aiosqlite.connect(self.db_path) as db:
