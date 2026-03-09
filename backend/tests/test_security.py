@@ -219,9 +219,16 @@ def test_environment_variable_loading():
     
     load_dotenv()
     
-    # Check that required environment variables exist
-    assert os.getenv("GEMINI_API_KEY") is not None, "GEMINI_API_KEY should be loaded from .env"
-    assert os.getenv("DATABASE_URL") is not None, "DATABASE_URL should be loaded from .env"
+    # Check that required environment variables exist (either from .env or CI environment)
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    database_url = os.getenv("DATABASE_URL")
+    
+    assert gemini_key is not None, "GEMINI_API_KEY should be set"
+    assert database_url is not None, "DATABASE_URL should be set"
+    
+    # In CI, these will be test values; in local dev, they should be real values
+    assert len(gemini_key) > 0, "GEMINI_API_KEY should not be empty"
+    assert len(database_url) > 0, "DATABASE_URL should not be empty"
 
 
 def test_log_sanitization_integration():
