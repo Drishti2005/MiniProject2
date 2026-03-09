@@ -16,7 +16,6 @@ import re
 import time
 from collections import deque
 from typing import Dict, List
-from datetime import timedelta
 
 import google.generativeai as genai
 
@@ -79,13 +78,14 @@ class RateLimiter:
 
             # Record this request
             self.requests.append(now)
-            logger.debug(f"Rate limiter: {len(self.requests)}/{self.max_requests} requests in window")
+            logger.debug(
+                f"Rate limiter: {len(self.requests)}/{self.max_requests} requests in window")
 
 
 class GeminiService:
     """
     Service for interacting with Google Gemini API.
-    
+
     Provides medical terminology simplification, question suggestions,
     visit summaries, and translation services with rate limiting,
     error handling, and performance monitoring.
@@ -94,10 +94,10 @@ class GeminiService:
     def __init__(self, api_key: str):
         """
         Initialize Gemini service.
-        
+
         Args:
             api_key: Google Gemini API key
-            
+
         Raises:
             ValueError: If API key is missing or invalid
         """
@@ -141,10 +141,10 @@ class GeminiService:
     def _sanitize_prompt(self, text: str) -> str:
         """
         Sanitize prompt to remove sensitive patient identifiers.
-        
+
         Args:
             text: Input text
-            
+
         Returns:
             Sanitized text
         """
@@ -160,14 +160,14 @@ class GeminiService:
     ) -> str:
         """
         Call Gemini API with retry logic and error handling.
-        
+
         Args:
             prompt: Prompt to send to API
             operation: Operation name for logging
-            
+
         Returns:
             API response text
-            
+
         Raises:
             Exception: If all retry attempts fail
         """
@@ -183,7 +183,9 @@ class GeminiService:
 
                 # Make API call with timeout
                 if LOG_API_CALLS:
-                    logger.info(f"API call: {operation} (attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS})")
+                    logger.info(
+                        f"API call: {operation} (attempt {
+                            attempt + 1}/{MAX_RETRY_ATTEMPTS})")
 
                 # Use asyncio.wait_for for timeout
                 response = await asyncio.wait_for(
@@ -222,7 +224,9 @@ class GeminiService:
                     await asyncio.sleep(RETRY_BACKOFF_SECONDS[attempt])
                 else:
                     if LOG_ERRORS:
-                        logger.error(f"API call failed after {MAX_RETRY_ATTEMPTS} attempts: {str(e)}")
+                        logger.error(
+                            f"API call failed after {MAX_RETRY_ATTEMPTS} attempts: {
+                                str(e)}")
                     raise Exception(f"API error: {str(e)}")
 
         raise Exception(f"Failed to complete {operation} after {MAX_RETRY_ATTEMPTS} attempts")
@@ -230,14 +234,14 @@ class GeminiService:
     def _parse_json_response(self, response_text: str, operation: str) -> Dict:
         """
         Parse JSON response from API.
-        
+
         Args:
             response_text: Raw API response
             operation: Operation name for error messages
-            
+
         Returns:
             Parsed JSON dict
-            
+
         Raises:
             ValueError: If JSON parsing fails
         """
@@ -261,13 +265,13 @@ class GeminiService:
     async def simplify_terms(self, transcript: str) -> List[Dict[str, str]]:
         """
         Simplify medical terms in transcript.
-        
+
         Args:
             transcript: Transcript chunk containing potential medical terms
-            
+
         Returns:
             List of dicts with 'term' and 'explanation' keys
-            
+
         Example:
             >>> terms = await service.simplify_terms("Patient has hypertension")
             >>> print(terms)
@@ -308,13 +312,13 @@ class GeminiService:
     async def suggest_questions(self, full_transcript: str) -> List[str]:
         """
         Generate question suggestions based on conversation.
-        
+
         Args:
             full_transcript: Complete conversation transcript
-            
+
         Returns:
             List of 2-3 suggested questions
-            
+
         Example:
             >>> questions = await service.suggest_questions(transcript)
             >>> print(questions)
@@ -358,14 +362,14 @@ class GeminiService:
     async def generate_summary(self, full_transcript: str) -> Dict:
         """
         Generate structured visit summary.
-        
+
         Args:
             full_transcript: Complete conversation transcript
-            
+
         Returns:
-            Dict with keys: title, diagnosis, medications, instructions, 
+            Dict with keys: title, diagnosis, medications, instructions,
             follow_up, key_points
-            
+
         Example:
             >>> summary = await service.generate_summary(transcript)
             >>> print(summary["title"])
@@ -382,12 +386,30 @@ class GeminiService:
 
             # Validate and normalize summary structure
             summary = {
-                "title": data.get("title", "Medical Visit"),
-                "diagnosis": data.get("diagnosis", ""),
-                "medications": data.get("medications", []) if isinstance(data.get("medications"), list) else [],
-                "instructions": data.get("instructions", []) if isinstance(data.get("instructions"), list) else [],
-                "follow_up": data.get("follow_up", ""),
-                "key_points": data.get("key_points", []) if isinstance(data.get("key_points"), list) else [],
+                "title": data.get(
+                    "title",
+                    "Medical Visit"),
+                "diagnosis": data.get(
+                    "diagnosis",
+                    ""),
+                "medications": data.get(
+                    "medications",
+                    []) if isinstance(
+                    data.get("medications"),
+                    list) else [],
+                "instructions": data.get(
+                        "instructions",
+                        []) if isinstance(
+                            data.get("instructions"),
+                            list) else [],
+                "follow_up": data.get(
+                                "follow_up",
+                                ""),
+                "key_points": data.get(
+                    "key_points",
+                    []) if isinstance(
+                    data.get("key_points"),
+                    list) else [],
             }
 
             logger.info(f"Generated visit summary: {summary['title']}")
@@ -411,17 +433,17 @@ class GeminiService:
     async def translate_text(self, text: str, target_language: str) -> str:
         """
         Translate text to target language.
-        
+
         Args:
             text: Text to translate
             target_language: Target language code (es, hi, zh, fr, ar)
-            
+
         Returns:
             Translated text
-            
+
         Raises:
             ValueError: If language not supported
-            
+
         Example:
             >>> translated = await service.translate_text("High blood pressure", "es")
             >>> print(translated)
@@ -458,7 +480,7 @@ class GeminiService:
     def get_performance_stats(self) -> Dict:
         """
         Get performance statistics.
-        
+
         Returns:
             Dict with performance metrics
         """
