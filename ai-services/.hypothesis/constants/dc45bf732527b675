@@ -1,0 +1,4 @@
+# file: C:\Users\trive\Documents\MiniProject2\.kiro\ai-task-implementation\config.py
+# hypothesis_version: 6.151.9
+
+[0.3, 1024, 3600, 'Arabic', 'French', 'GEMINI_API_KEY', 'Hindi', 'INFO', 'LOG_LEVEL', 'Mandarin', 'Spanish', '\\b\\d{10,}\\b', 'ar', 'es', 'fr', 'gemini-2.0-flash-exp', 'hi', 'zh']
