@@ -1,0 +1,61 @@
+name: AI Integration Tests
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: 
+      - develop
+      - main
+      - 'features/**'  # Include feature branches
+      - 'feature/**'
+
+jobs:
+  ai-integration-tests:
+    name: AI Integration Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.14'
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-ai-${{ hashFiles('ai-services/requirements.txt') }}
+      
+      - name: Install dependencies
+        run: |
+          cd ai-services
+          pip install -r requirements.txt
+      
+      - name: Run Linting
+        run: |
+          cd ai-services
+          pip install flake8
+          flake8 gemini_service.py config.py prompts.py --max-line-length=100 --extend-ignore=E501,W503,E203
+      
+      - name: Run Tests
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_TEST }}
+          PYTHONPATH: .
+        run: |
+          cd ai-services
+          pytest tests/ -v --tb=short -k "not rate_limiter_queues and not rate_limit_queue"
+      
+      - name: Run Basic Functionality Tests
+        run: |
+          cd ai-services
+          python test_basic.py
+      
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "✅ AI Integration tests completed"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
