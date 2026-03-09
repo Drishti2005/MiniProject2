@@ -184,8 +184,7 @@ class GeminiService:
                 # Make API call with timeout
                 if LOG_API_CALLS:
                     logger.info(
-                        f"API call: {operation} (attempt {
-                            attempt + 1}/{MAX_RETRY_ATTEMPTS})")
+                        f"API call: {operation} (attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS})")
 
                 # Use asyncio.wait_for for timeout
                 response = await asyncio.wait_for(
@@ -225,8 +224,7 @@ class GeminiService:
                 else:
                     if LOG_ERRORS:
                         logger.error(
-                            f"API call failed after {MAX_RETRY_ATTEMPTS} attempts: {
-                                str(e)}")
+                            f"API call failed after {MAX_RETRY_ATTEMPTS} attempts: {str(e)}")
                     raise Exception(f"API error: {str(e)}")
 
         raise Exception(f"Failed to complete {operation} after {MAX_RETRY_ATTEMPTS} attempts")
