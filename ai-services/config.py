@@ -3,7 +3,6 @@ Configuration and constants for Gemini AI service.
 """
 
 import os
-from typing import List
 
 # Gemini API Configuration
 GEMINI_MODEL = "gemini-2.0-flash-exp"
