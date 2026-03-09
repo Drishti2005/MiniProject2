@@ -34,10 +34,6 @@ jobs:
       
       - name: Lint AI Service
         run: |
-          if [ -d "ai-service" ]; then
-            cd ai-service
-            flake8 . --max-line-length=100 --exclude=__pycache__,*.pyc --extend-ignore=E501,W503,E203,F401,F811 || true
-          fi
           if [ -d "ai-services" ]; then
             cd ai-services
             flake8 gemini_service.py config.py prompts.py --max-line-length=100 --extend-ignore=E501,W503,E203 || true
@@ -105,10 +101,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          if [ -d "ai-service" ]; then
-            cd ai-service
-            pip install -r requirements.txt
-          elif [ -d "ai-services" ]; then
+          if [ -d "ai-services" ]; then
             cd ai-services
             pip install -r requirements.txt
           fi
@@ -119,10 +112,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_TEST }}
           PYTHONPATH: .
         run: |
-          if [ -d "ai-service/tests" ] && [ "$(ls -A ai-service/tests/*.py 2>/dev/null)" ]; then
-            cd ai-service
-            pytest tests/ -v
-          elif [ -d "ai-services/tests" ]; then
+          if [ -d "ai-services/tests" ]; then
             cd ai-services
             pytest tests/ -v --tb=short -k "not rate_limiter_queues and not rate_limit_queue"
           else
