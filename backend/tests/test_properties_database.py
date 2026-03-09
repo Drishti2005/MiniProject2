@@ -2,7 +2,7 @@
 # Feature: sidekick-medical-assistant
 
 import pytest
-from hypothesis import given, strategies as st, settings
+from hypothesis import given, strategies as st, settings, HealthCheck
 from uuid import UUID
 import asyncio
 
@@ -12,7 +12,10 @@ import asyncio
     term=st.text(min_size=1, max_size=50).filter(lambda s: s.strip()),
     explanation=st.text(min_size=10, max_size=200).filter(lambda s: s.strip())
 )
-@settings(max_examples=100)
+@settings(
+    max_examples=100,
+    suppress_health_check=[HealthCheck.function_scoped_fixture]
+)
 @pytest.mark.asyncio
 async def test_simplification_accumulation_invariant(db_service, test_session, term, explanation):
     """
@@ -39,7 +42,7 @@ async def test_simplification_accumulation_invariant(db_service, test_session, t
     term=st.text(min_size=1, max_size=50).filter(lambda s: s.strip()),
     explanation=st.text(min_size=10, max_size=200).filter(lambda s: s.strip())
 )
-@settings(max_examples=100)
+@settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
 async def test_simplification_persistence_completeness(db_service, test_session, term, explanation):
     """
@@ -81,7 +84,7 @@ async def test_simplification_persistence_completeness(db_service, test_session,
     term=st.text(min_size=1, max_size=50).filter(lambda s: s.strip()),
     explanation=st.text(min_size=10, max_size=200).filter(lambda s: s.strip())
 )
-@settings(max_examples=100)
+@settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
 async def test_session_deletion_cascade(db_service, transcript_text, term, explanation):
     """
@@ -124,7 +127,7 @@ async def test_session_deletion_cascade(db_service, transcript_text, term, expla
 @given(
     text=st.text(min_size=10, max_size=500).filter(lambda s: s.strip())
 )
-@settings(max_examples=100)
+@settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
 async def test_transcript_chunk_persistence(db_service, test_session, text):
     """
@@ -159,7 +162,6 @@ async def test_transcript_chunk_persistence(db_service, test_session, text):
 
 
 # Feature: sidekick-medical-assistant, Property 38: Session End Timestamp Update
-@settings(max_examples=100)
 @pytest.mark.asyncio
 async def test_session_end_timestamp_update(db_service):
     """
@@ -191,7 +193,7 @@ async def test_session_end_timestamp_update(db_service):
     diagnosis=st.text(min_size=5, max_size=200).filter(lambda s: s.strip()),
     follow_up=st.text(min_size=5, max_size=200).filter(lambda s: s.strip())
 )
-@settings(max_examples=100)
+@settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
 async def test_summary_structure_completeness(db_service, test_session, title, diagnosis, follow_up):
     """

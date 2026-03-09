@@ -1,7 +1,7 @@
 # Property-based tests for performance constraints
 
 import pytest
-from hypothesis import given, strategies as st, settings
+from hypothesis import given, strategies as st, settings, HealthCheck
 import asyncio
 import time
 import sys
@@ -16,7 +16,10 @@ sys.path.insert(0, project_root)
 @given(
     text=st.text(min_size=10, max_size=500).filter(lambda s: s.strip())
 )
-@settings(max_examples=50)  # Reduced for performance tests
+@settings(
+    max_examples=50,  # Reduced for performance tests
+    suppress_health_check=[HealthCheck.function_scoped_fixture]
+)
 @pytest.mark.asyncio
 async def test_transcript_processing_time(db_service, test_session, text):
     """
@@ -37,7 +40,6 @@ async def test_transcript_processing_time(db_service, test_session, text):
 
 
 # Feature: sidekick-medical-assistant, Property 58: Database Query Performance
-@settings(max_examples=50)
 @pytest.mark.asyncio
 async def test_database_query_performance(db_service, test_session):
     """
@@ -64,7 +66,6 @@ async def test_database_query_performance(db_service, test_session):
     assert session_details is not None
 
 
-@settings(max_examples=20)
 @pytest.mark.asyncio
 async def test_session_creation_performance(db_service):
     """
@@ -84,7 +85,6 @@ async def test_session_creation_performance(db_service):
     await db_service.delete_session(session_id)
 
 
-@settings(max_examples=20)
 @pytest.mark.asyncio
 async def test_get_all_sessions_performance(db_service):
     """
@@ -119,7 +119,7 @@ async def test_get_all_sessions_performance(db_service):
     term=st.text(min_size=1, max_size=50).filter(lambda s: s.strip()),
     explanation=st.text(min_size=10, max_size=200).filter(lambda s: s.strip())
 )
-@settings(max_examples=50)
+@settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @pytest.mark.asyncio
 async def test_simplification_storage_performance(db_service, test_session, term, explanation):
     """
@@ -136,7 +136,6 @@ async def test_simplification_storage_performance(db_service, test_session, term
         f"Simplification storage took {elapsed_ms:.2f}ms, expected < 200ms"
 
 
-@settings(max_examples=20)
 @pytest.mark.asyncio
 async def test_summary_storage_performance(db_service, test_session):
     """
@@ -162,7 +161,6 @@ async def test_summary_storage_performance(db_service, test_session):
         f"Summary storage took {elapsed_ms:.2f}ms, expected < 300ms"
 
 
-@settings(max_examples=20)
 @pytest.mark.asyncio
 async def test_session_deletion_performance(db_service):
     """

@@ -32,6 +32,22 @@ if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
 else:
     from database import DatabaseService
 
+from models import *
+from performance import monitor_performance, PerformanceTimer
+from security import (
+    sanitize_text_input, 
+    validate_websocket_message, 
+    SanitizingLogger,
+    ensure_no_audio_storage
+)
+
+# Configure logging with sanitization BEFORE importing AI service
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s'
+)
+logger = SanitizingLogger(__name__)
+
 # Import AI service - tries real service first, falls back to mock
 try:
     # Try to import real AI service (from AI Integration team)
@@ -51,22 +67,6 @@ except ImportError:
             sys.path.insert(0, ai_service_path)
         from gemini_service_mock import GeminiService
         logger.info("Using MOCK Gemini AI service (for testing)")
-
-from models import *
-from performance import monitor_performance, PerformanceTimer
-from security import (
-    sanitize_text_input, 
-    validate_websocket_message, 
-    SanitizingLogger,
-    ensure_no_audio_storage
-)
-
-# Configure logging with sanitization
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s'
-)
-logger = SanitizingLogger(__name__)
 
 if not GEMINI_API_KEY:
     logger.critical("GEMINI_API_KEY environment variable is required")
