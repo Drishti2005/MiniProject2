@@ -123,8 +123,13 @@ async def startup():
         sys.exit(1)
 
 
-# Serve frontend static files
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+# Serve frontend static files (only if frontend directory exists)
+import os
+frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
+else:
+    logger.warning("Frontend directory not found - static file serving disabled")
 
 
 # REST API Endpoints
@@ -132,7 +137,13 @@ app.mount("/static", StaticFiles(directory="frontend"), name="static")
 async def serve_frontend():
     """Serve the main application HTML page"""
     try:
-        return FileResponse("frontend/index.html")
+        frontend_index = os.path.join(frontend_dir, "index.html")
+        if os.path.exists(frontend_index):
+            return FileResponse(frontend_index)
+        else:
+            raise HTTPException(status_code=404, detail="Frontend not found")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Frontend not found")
     except Exception as e:
         logger.error(f"Failed to serve frontend: {e}")
         raise HTTPException(status_code=500, detail="Failed to load application")
