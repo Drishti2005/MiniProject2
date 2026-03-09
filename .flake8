@@ -15,18 +15,16 @@ exclude =
     *.egg-info
 
 # Ignore these errors during skeleton code phase
-extend-ignore = 
-    E501,  # Line too long (handled by max-line-length)
-    W503,  # Line break before binary operator
-    E203,  # Whitespace before ':'
-    F401,  # Module imported but unused
-    F811,  # Redefinition of unused name
-    E402,  # Module level import not at top of file
+# E501: Line too long (handled by max-line-length)
+# W503: Line break before binary operator
+# E203: Whitespace before ':'
+# F401: Module imported but unused
+# F811: Redefinition of unused name
+# E402: Module level import not at top of file
+extend-ignore = E501,W503,E203,F401,F811,E402
     
 # Per-file ignores
-per-file-ignores =
-    __init__.py:F401
-    */tests/*:F401,F811
+per-file-ignores = __init__.py:F401,*/tests/*:F401,F811
 
 # Show source code for each error
 show-source = True
