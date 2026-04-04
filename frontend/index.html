@@ -1,95 +1,246 @@
-<!-- TEAM: Frontend -->
-<!-- Main application page for Sidekick Medical Assistant -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sidekick - AI Medical Assistant</title>
-    <link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sidekick – AI Medical Assistant</title>
+  <meta name="description" content="Sidekick – Real-time AI medical appointment assistant. Live transcription, term simplification, and visit summaries powered by Gemini." />
+  <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
-    <header>
-        <h1>🏥 Sidekick - AI Medical Assistant</h1>
-        <nav>
-            <a href="history.html">History</a>
-        </nav>
-    </header>
 
-    <main class="app-container">
-        <!-- Left Panel: Live Transcript -->
-        <section class="transcript-panel">
-            <h2>📝 Live Transcript</h2>
-            <div id="transcript-content" class="transcript-content">
-                <!-- Transcript will be appended here -->
-            </div>
-        </section>
+<div class="app-shell">
 
-        <!-- Right Panel: Simplified Terms and Questions -->
-        <aside class="info-panel">
-            <!-- Simplified Terms -->
-            <section class="simplified-terms">
-                <h2>💡 Simplified Terms</h2>
-                <div id="terms-content" class="terms-content">
-                    <!-- Simplified terms will be displayed here -->
-                </div>
-            </section>
-
-            <!-- Suggested Questions -->
-            <section class="suggested-questions">
-                <h2>❓ Questions You Could Ask</h2>
-                <ol id="questions-content" class="questions-content">
-                    <!-- Questions will be displayed here -->
-                </ol>
-            </section>
-        </aside>
-    </main>
-
-    <!-- Controls -->
-    <footer class="controls">
-        <div class="language-selector">
-            <label for="language">🌐 Translate to:</label>
-            <select id="language">
-                <option value="en">English (No Translation)</option>
-                <option value="es">Spanish</option>
-                <option value="hi">Hindi</option>
-                <option value="zh">Mandarin</option>
-                <option value="fr">French</option>
-                <option value="ar">Arabic</option>
-            </select>
-        </div>
-
-        <div class="recording-controls">
-            <button id="start-recording" class="btn btn-primary">
-                🔴 Start Recording
-            </button>
-            <button id="stop-recording" class="btn btn-danger" disabled>
-                ■ Stop Recording
-            </button>
-            <span id="recording-indicator" class="recording-indicator hidden"></span>
-        </div>
-    </footer>
-
-    <!-- Translation Panel (hidden by default) -->
-    <section id="translation-panel" class="translation-panel hidden">
-        <h3>🔄 Translation</h3>
-        <div id="translation-content"></div>
-    </section>
-
-    <!-- Summary Modal -->
-    <div id="summary-modal" class="modal hidden">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Visit Summary</h2>
-            <div id="summary-content">
-                <!-- Summary will be displayed here -->
-            </div>
-        </div>
+  <!-- ═══════════════════════════════════════════════
+       SIDEBAR — The Clinical Concierge
+       ═══════════════════════════════════════════════ -->
+  <aside class="sidebar" role="navigation" aria-label="Main navigation">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo-wrap">
+        <div class="sidebar-logo-icon" aria-hidden="true">🩺</div>
+        <span class="sidebar-wordmark">Sidekick</span>
+      </div>
+      <span class="sidebar-tagline">Clinical AI Assistant</span>
     </div>
 
-    <!-- Scripts -->
-    <script src="js/speech.js"></script>
-    <script src="js/app.js"></script>
-    <script src="js/ui.js"></script>
+    <ul class="sidebar-nav" role="list">
+      <li class="nav-item">
+        <a href="/" class="nav-link active" id="nav-live" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          </span>
+          Live Session
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="/history" class="nav-link" id="nav-history">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </span>
+          History
+        </a>
+      </li>
+    </ul>
+
+    <!-- Live status indicator -->
+    <div class="sidebar-status" id="sidebar-status">
+      <span class="sidebar-status-dot"></span>
+      <span id="sidebar-status-text">Session ready</span>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" aria-hidden="true">Dr</div>
+        <div>
+          <div class="user-name">Doctor</div>
+          <div class="user-role">Clinical Session</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════════════════════
+       MAIN CONTENT — Editorial Split Pane
+       ═══════════════════════════════════════════════ -->
+  <div class="main-content" role="main">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="topbar-title">Live Session</h1>
+        <div class="recording-badge" id="recording-badge" role="status" aria-live="polite">
+          <span class="recording-badge-dot" id="recording-badge-dot"></span>
+          <span id="recording-status-text">Ready</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="language-selector">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <label for="language" class="sr-only">Translation language</label>
+          <select id="language" aria-label="Translation language">
+            <option value="en">English (None)</option>
+            <option value="hi">Hindi</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="zh">Chinese</option>
+            <option value="ar">Arabic</option>
+            <option value="bn">Bengali</option>
+            <option value="ta">Tamil</option>
+            <option value="te">Telugu</option>
+            <option value="mr">Marathi</option>
+            <option value="gu">Gujarati</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <!-- WORKSPACE — Split Pane -->
+    <div class="workspace">
+
+      <!-- LEFT: TRANSCRIPT PANEL -->
+      <section class="transcript-panel" aria-label="Live transcript">
+        <div class="panel-header">
+          <span class="panel-label">Live Transcript</span>
+          <div class="ai-thinking-card" id="ai-thinking" aria-live="polite">
+            <div class="ai-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span class="ai-thinking-text">AI is analysing…</span>
+          </div>
+        </div>
+
+        <!-- Translation card (hidden by default) -->
+        <div class="translation-card" id="translation-card" aria-live="polite">
+          <div class="translation-inner">
+            <div class="translation-label">Translation</div>
+            <div class="translation-text" id="translation-text"></div>
+          </div>
+        </div>
+
+        <div class="transcript-content" id="transcript-content" aria-label="Transcript content" aria-live="polite">
+          <div class="transcript-empty" id="transcript-empty">
+            <div class="transcript-empty-orb" aria-hidden="true">🎙️</div>
+            <h3>Ready to listen</h3>
+            <p>Press <strong>Start Recording</strong> below to begin capturing the appointment conversation.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: INSIGHTS PANEL -->
+      <aside class="insights-panel" aria-label="AI Insights">
+        <div class="insights-panel-title">AI Insights</div>
+
+        <!-- Terms Explained Card -->
+        <div class="insight-card" id="terms-card">
+          <div class="insight-card-header">
+            <div class="insight-icon-wrap terms-icon-wrap" aria-hidden="true">💡</div>
+            <h3>Terms Explained</h3>
+            <span class="insight-card-count" id="terms-count" style="display:none">0</span>
+          </div>
+          <div class="insight-card-body">
+            <div class="terms-list" id="terms-list">
+              <p class="terms-empty">Medical terms will be explained here as they are spoken.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Patient Prompts Card -->
+        <div class="insight-card" id="questions-card">
+          <div class="insight-card-header">
+            <div class="insight-icon-wrap questions-icon-wrap" aria-hidden="true">💬</div>
+            <h3>Patient Prompts</h3>
+            <span class="insight-card-count" id="questions-count" style="display:none">0</span>
+          </div>
+          <div class="insight-card-body">
+            <div id="questions-content">
+              <p class="questions-empty">Suggested questions will appear as the conversation develops.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Session Info Card -->
+        <div class="insight-card" id="session-info-card">
+          <div class="insight-card-header">
+            <div class="insight-icon-wrap" style="background:rgba(219,225,255,0.5)" aria-hidden="true">📊</div>
+            <h3>Session Info</h3>
+          </div>
+          <div class="insight-card-body">
+            <div style="display:flex; flex-direction:column; gap:0.5rem;">
+              <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
+                <span style="color:var(--on-surface-variant)">Duration</span>
+                <span id="session-duration" style="font-weight:600;color:var(--on-surface)">—</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
+                <span style="color:var(--on-surface-variant)">Phrases captured</span>
+                <span id="phrase-count" style="font-weight:600;color:var(--on-surface)">0</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
+                <span style="color:var(--on-surface-variant)">AI requests</span>
+                <span id="ai-request-count" style="font-weight:600;color:var(--on-surface)">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         FLOATING PILL CONTROLS — The Clinical Concierge
+         ══════════════════════════════════════════════ -->
+    <div class="controls-bar" id="controls-bar" role="toolbar" aria-label="Session controls">
+      <div class="rec-indicator" id="rec-indicator" aria-live="polite">
+        <span class="rec-dot" aria-hidden="true"></span>
+        REC
+      </div>
+      <button id="start-recording" class="btn btn-record" aria-label="Start recording">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="6"/></svg>
+        Start Recording
+      </button>
+      <button id="stop-recording" class="btn btn-pill-secondary" disabled aria-label="Stop and summarise">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        Stop &amp; Summarise
+      </button>
+    </div>
+
+  </div><!-- /main-content -->
+</div><!-- /app-shell -->
+
+<!-- ══════════════════════════════════════════════
+     SUMMARY MODAL
+     ══════════════════════════════════════════════ -->
+<div class="modal-overlay" id="summary-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <span class="modal-title" id="modal-title">Visit Summary</span>
+        <div class="modal-subtitle" id="modal-subtitle"></div>
+      </div>
+      <button class="modal-close" id="modal-close" aria-label="Close summary">✕</button>
+    </div>
+    <div class="summary-stats" id="summary-stats" style="display:none">
+      <!-- injected by ui.js -->
+    </div>
+    <div id="summary-content" aria-live="polite">
+      <p class="summary-text" style="padding: 1rem 0;">Generating your visit summary…</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary btn-sm" id="modal-close-btn">Close</button>
+      <button class="btn btn-primary btn-sm" id="print-btn" onclick="window.print()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST NOTIFICATIONS -->
+<div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+<!-- SCRIPTS (order matters) -->
+<script src="/static/js/speech.js"></script>
+<script src="/static/js/ui.js"></script>
+<script src="/static/js/app.js"></script>
+
 </body>
 </html>

@@ -219,7 +219,7 @@ def validate_websocket_message(message: Dict[str, Any]) -> tuple[bool, str]:
         return False, "Message must have a 'type' field"
     
     message_type = message.get("type")
-    valid_types = ["transcript", "end_session", "language_change"]
+    valid_types = ["transcript", "end_session", "language_change", "ping"]
     
     if message_type not in valid_types:
         return False, f"Invalid message type: {message_type}"
