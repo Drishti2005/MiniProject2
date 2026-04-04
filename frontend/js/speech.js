@@ -4,7 +4,7 @@
 class SpeechRecognitionManager {
     /**
      * Manages browser-based speech recognition
-     * 
+     *
      * @param {Function} onTranscript - Callback when transcript is received (text, isFinal)
      * @param {Function} onError - Callback when error occurs
      */
@@ -19,8 +19,7 @@ class SpeechRecognitionManager {
 
     /**
      * Check if Web Speech API is supported in the browser
-     * 
-     * @returns {boolean} True if supported, false otherwise
+     * @returns {boolean}
      */
     isSupported() {
         return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
@@ -31,21 +30,28 @@ class SpeechRecognitionManager {
      */
     start() {
         if (!this.isSupported()) {
-            this.onError({ error: 'not-supported', message: 'Web Speech API not supported in this browser' });
+            this.onError('Speech recognition is not supported in this browser. Please use Chrome.');
             return;
         }
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         this.recognition = new SpeechRecognition();
+
         this.recognition.continuous = true;
         this.recognition.interimResults = true;
         this.recognition.lang = 'en-US';
+        this.recognition.maxAlternatives = 1;
 
         this.recognition.onresult = (event) => this.handleResult(event);
-        this.recognition.onerror = (event) => this.handleError(event);
-        this.recognition.onend = () => {
-            if (this.isRecording && this.restartAttempts < this.maxRestartAttempts) {
-                this.restart();
+        this.recognition.onerror  = (event) => this.handleError(event);
+        this.recognition.onend    = () => {
+            // Auto-restart if still in recording mode
+            if (this.isRecording) {
+                setTimeout(() => {
+                    if (this.isRecording && this.recognition) {
+                        try { this.recognition.start(); } catch(e) {}
+                    }
+                }, 200);
             }
         };
 
@@ -53,8 +59,8 @@ class SpeechRecognitionManager {
             this.recognition.start();
             this.isRecording = true;
             this.restartAttempts = 0;
-        } catch (error) {
-            this.onError({ error: 'start-failed', message: error.message });
+        } catch (e) {
+            this.onError('Could not start speech recognition: ' + e.message);
         }
     }
 
@@ -67,62 +73,79 @@ class SpeechRecognitionManager {
         if (this.recognition) {
             try {
                 this.recognition.stop();
-            } catch (error) {
-                console.error('Error stopping recognition:', error);
-            }
+            } catch (e) { /* ignore */ }
+            this.recognition = null;
         }
     }
 
     /**
      * Handle speech recognition results
-     * 
-     * @param {Event} event - Speech recognition result event
+     * @param {Event} event
      */
     handleResult(event) {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
-            const result = event.results[i];
-            const transcript = result[0].transcript;
-            const isFinal = result.isFinal;
-            
-            if (this.onTranscript) {
-                this.onTranscript(transcript, isFinal);
+            const transcriptPart = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcriptPart;
+            } else {
+                interimTranscript += transcriptPart;
             }
+        }
+
+        // Send interim results for live display
+        if (interimTranscript) {
+            this.onTranscript(interimTranscript, false);
+        }
+
+        // Send final results to backend
+        if (finalTranscript.trim()) {
+            this.onTranscript(finalTranscript.trim(), true);
         }
     }
 
     /**
      * Handle speech recognition errors with automatic restart
-     * 
-     * @param {Event} event - Speech recognition error event
+     * @param {Event} event
      */
     handleError(event) {
-        console.error('Speech recognition error:', event.error);
-        
-        const errorMessages = {
-            'no-speech': 'No speech detected. Please try speaking again.',
-            'network': 'Network error occurred. Please check your connection.',
-            'not-allowed': 'Microphone access denied. Please allow microphone access.',
-            'audio-capture': 'No microphone found. Please connect a microphone.',
-            'aborted': 'Speech recognition was aborted.'
-        };
+        const errorType = event.error;
+        console.warn('Speech recognition error:', errorType);
 
-        const message = errorMessages[event.error] || `Speech recognition error: ${event.error}`;
-        
-        if (this.onError) {
-            this.onError({ error: event.error, message });
-        }
-
-        // Don't restart for permission or hardware errors
-        if (event.error === 'not-allowed' || event.error === 'audio-capture') {
-            this.isRecording = false;
+        // Non-fatal errors
+        if (errorType === 'no-speech') {
+            // Silence detected – not a real error, recognition will auto-restart
             return;
         }
 
-        // Attempt automatic restart for recoverable errors
-        if (this.isRecording && this.restartAttempts < this.maxRestartAttempts) {
-            if (event.error === 'no-speech' || event.error === 'network' || event.error === 'aborted') {
+        if (errorType === 'network') {
+            if (this.restartAttempts < this.maxRestartAttempts) {
                 this.restart();
+            } else {
+                this.onError('Network error during speech recognition. Please check your connection.');
             }
+            return;
+        }
+
+        if (errorType === 'not-allowed' || errorType === 'service-not-allowed') {
+            this.isRecording = false;
+            this.onError('Microphone access denied. Please allow microphone permission and try again.');
+            return;
+        }
+
+        if (errorType === 'audio-capture') {
+            this.isRecording = false;
+            this.onError('Microphone not found. Please connect a microphone and try again.');
+            return;
+        }
+
+        // Generic error – attempt restart
+        if (this.restartAttempts < this.maxRestartAttempts) {
+            this.restart();
+        } else {
+            this.onError('Speech recognition failed. Please stop and start again.');
         }
     }
 
@@ -131,15 +154,9 @@ class SpeechRecognitionManager {
      */
     restart() {
         this.restartAttempts++;
-        console.log(`Restarting speech recognition (attempt ${this.restartAttempts}/${this.maxRestartAttempts})`);
-        
         setTimeout(() => {
             if (this.isRecording) {
-                try {
-                    this.recognition.start();
-                } catch (error) {
-                    console.error('Error restarting recognition:', error);
-                }
+                try { this.recognition.start(); } catch(e) {}
             }
         }, 1000);
     }

@@ -1,282 +1,252 @@
-// TEAM: Frontend
-// WebSocket client and main application logic
+// ============================================================
+// SIDEKICK — App.js
+// WebSocket client + main application logic
+// Clinical Concierge — fully wired to backend
+// ============================================================
 
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/session`;
+
+// ── WebSocket Client ──────────────────────────────────────────
 class WebSocketClient {
-    /**
-     * 
-     * @param {string} url - WebSocket URL (ws://localhost:8000/ws/session)
-     */
     constructor(url) {
         this.url = url;
-        this.ws = null;
+        this.ws  = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 3;
-        this.reconnectDelay = 1000; // Start with 1 second
-        this.heartbeatInterval = null;
-        this.messageQueue = [];
+        this.reconnectDelay  = 1000;
+        this.heartbeatTimer  = null;
+        this.messageQueue    = [];
+        this.onMessage       = null;
     }
 
-    /**
-     * Establish WebSocket connection
-     */
     connect() {
         try {
             this.ws = new WebSocket(this.url);
 
             this.ws.onopen = () => {
-                console.log('WebSocket connected');
+                console.log('[WS] Connected');
                 this.reconnectAttempts = 0;
-                this.reconnectDelay = 1000;
-                this.startHeartbeat();
+                this.reconnectDelay    = 1000;
+                while (this.messageQueue.length) this._send(this.messageQueue.shift());
+                this._startHeartbeat();
+            };
 
-                // Send queued messages
-                while (this.messageQueue.length > 0) {
-                    const message = this.messageQueue.shift();
-                    this.send(message);
+            this.ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (this.onMessage) this.onMessage(data);
+                } catch (e) {
+                    console.error('[WS] Parse error:', e);
                 }
             };
 
-            this.ws.onmessage = (event) => this.onMessage(event);
+            this.ws.onerror = (e) => console.error('[WS] Error:', e);
 
-            this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
+            this.ws.onclose = (event) => {
+                console.log('[WS] Closed, code:', event.code);
+                this._stopHeartbeat();
+                if (event.code !== 1000) this._reconnect();
             };
-
-            this.ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                this.stopHeartbeat();
-                this.reconnect();
-            };
-        } catch (error) {
-            console.error('Failed to create WebSocket:', error);
-            this.reconnect();
+        } catch (e) {
+            console.error('[WS] Cannot connect:', e);
+            this._reconnect();
         }
     }
 
-    /**
-     * Disconnect WebSocket
-     */
     disconnect() {
-        this.stopHeartbeat();
-        this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnection
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
-        }
+        this._stopHeartbeat();
+        this.reconnectAttempts = this.maxReconnectAttempts; // prevent auto-reconnect
+        if (this.ws) { this.ws.close(1000, 'client-disconnect'); this.ws = null; }
     }
 
-    /**
-     * Send message via WebSocket
-     * 
-     * @param {Object} message - Message object to send
-     */
     send(message) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(message));
+            this._send(message);
         } else {
-            console.log('WebSocket not connected, queuing message');
             this.messageQueue.push(message);
         }
     }
 
-    /**
-     * Handle incoming WebSocket messages
-     * 
-     * @param {Event} event - WebSocket message event
-     */
-    onMessage(event) {
-        try {
-            const data = JSON.parse(event.data);
-            console.log('Received message:', data);
-
-            // Route message by type
-            switch (data.type) {
-                case 'session_created':
-                    if (window.uiManager) {
-                        window.sessionId = data.session_id;
-                    }
-                    break;
-                case 'simplification':
-                    if (window.uiManager) {
-                        window.uiManager.addSimplification(data.term, data.explanation);
-                        if (data.translation && window.currentLanguage !== 'en') {
-                            window.uiManager.showTranslation(data.translation);
-                        }
-                    }
-                    break;
-                case 'questions':
-                    if (window.uiManager) {
-                        window.uiManager.updateQuestions(data.questions);
-                    }
-                    break;
-                case 'translation':
-                    if (window.uiManager) {
-                        window.uiManager.showTranslation(data.text);
-                    }
-                    break;
-                case 'summary':
-                    if (window.uiManager) {
-                        window.uiManager.displaySummary(data.summary);
-                    }
-                    break;
-                case 'error':
-                    if (window.uiManager) {
-                        window.uiManager.showError(data.message || 'An error occurred');
-                    }
-                    break;
-                case 'pong':
-                    // Heartbeat response
-                    break;
-                default:
-                    console.warn('Unknown message type:', data.type);
-            }
-        } catch (error) {
-            console.error('Error parsing WebSocket message:', error);
-        }
+    _send(message) {
+        try { this.ws.send(JSON.stringify(message)); }
+        catch (e) { console.error('[WS] Send error:', e); }
     }
 
-    /**
-     * Attempt to reconnect with exponential backoff
-     */
-    reconnect() {
+    _reconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('Max reconnection attempts reached');
-            if (window.uiManager) {
-                window.uiManager.showError('Connection lost. Please refresh the page.');
-            }
+            console.warn('[WS] Max reconnect attempts reached');
+            if (window._ui) window._ui.showError('Connection lost. Please refresh the page.');
             return;
         }
-
         this.reconnectAttempts++;
-        console.log(`Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-
-        setTimeout(() => {
-            this.connect();
-        }, this.reconnectDelay);
-
-        // Exponential backoff: 1s, 2s, 4s
-        this.reconnectDelay *= 2;
+        console.log(`[WS] Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts})`);
+        setTimeout(() => this.connect(), this.reconnectDelay);
+        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000);
     }
 
-    /**
-     * Send heartbeat ping to keep connection alive
-     */
-    sendHeartbeat() {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.send({ type: 'ping' });
-        }
+    _startHeartbeat() {
+        this._stopHeartbeat();
+        this.heartbeatTimer = setInterval(() => this.send({ type: 'ping' }), 30000);
     }
 
-    /**
-     * Start heartbeat interval
-     */
-    startHeartbeat() {
-        this.stopHeartbeat();
-        this.heartbeatInterval = setInterval(() => {
-            this.sendHeartbeat();
-        }, 30000); // 30 seconds
+    _stopHeartbeat() {
+        if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
     }
 
-    /**
-     * Stop heartbeat interval
-     */
-    stopHeartbeat() {
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-            this.heartbeatInterval = null;
-        }
+    get isConnected() {
+        return this.ws && this.ws.readyState === WebSocket.OPEN;
     }
 }
 
-// Application initialization
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize UI manager
-    window.uiManager = new UIManager();
+// ── Application globals ───────────────────────────────────────
+let wsClient          = null;
+let speechMgr         = null;
+let ui                = null;
+let currentSessionId  = null;
+let selectedLanguage  = 'en';
 
-    // Initialize WebSocket client
-    const wsUrl = `ws://${window.location.hostname}:8000/ws/session`;
-    window.wsClient = new WebSocketClient(wsUrl);
-    window.wsClient.connect();
+// ── Initialisation ────────────────────────────────────────────
+function initApp() {
+    ui         = new UIManager();
+    window._ui = ui;
+    ui.clearSession();
 
-    // Initialize Speech recognition manager
-    window.speechManager = new SpeechRecognitionManager(
-        (text, isFinal) => {
-            // Update UI with transcript
-            window.uiManager.updateTranscript(text, isFinal);
+    // Modal close handlers
+    const summaryModal = document.getElementById('summary-modal');
+    document.getElementById('modal-close')?.addEventListener('click', () => ui.hideSummary());
+    document.getElementById('modal-close-btn')?.addEventListener('click', () => ui.hideSummary());
+    summaryModal?.addEventListener('click', e => { if (e.target === summaryModal) ui.hideSummary(); });
 
-            // Send final transcripts to backend
-            if (isFinal && window.sessionId) {
-                window.wsClient.send({
-                    type: 'transcript',
-                    session_id: window.sessionId,
-                    text: text,
-                    language: window.currentLanguage || 'en'
-                });
-            }
-        },
-        (error) => {
-            // Handle speech recognition errors
-            window.uiManager.showError(error.message);
-            if (error.error === 'not-allowed' || error.error === 'audio-capture') {
-                window.uiManager.setRecordingState(false);
-            }
-        }
+    // Language selector
+    document.getElementById('language')?.addEventListener('change', e => {
+        selectedLanguage = e.target.value;
+        if (selectedLanguage === 'en') ui.hideTranslation();
+    });
+
+    // Recording buttons
+    document.getElementById('start-recording')?.addEventListener('click', startSession);
+    document.getElementById('stop-recording')?.addEventListener('click', stopSession);
+}
+
+// ── Start session ─────────────────────────────────────────────
+function startSession() {
+    // Connect WebSocket
+    wsClient = new WebSocketClient(WS_URL);
+    wsClient.onMessage = handleServerMessage;
+    wsClient.connect();
+
+    // Init speech recognition
+    speechMgr = new SpeechRecognitionManager(
+        (text, isFinal) => onTranscript(text, isFinal),
+        (msg) => ui.showError(msg)
     );
 
-    // Set up recording controls
-    const startBtn = document.getElementById('start-recording');
-    const stopBtn = document.getElementById('stop-recording');
+    if (!speechMgr.isSupported()) {
+        ui.showError('Speech recognition is not supported. Please use Google Chrome or Microsoft Edge.');
+        resetSession();
+        return;
+    }
 
-    startBtn.addEventListener('click', () => {
-        if (!window.speechManager.isSupported()) {
-            window.uiManager.showError('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
-            return;
-        }
+    // Brief delay to let WS handshake complete
+    setTimeout(() => {
+        speechMgr.start();
+        ui.setRecordingState(true);
+        ui.showToast('🎙️ Recording started', 'success');
+    }, 500);
+}
 
-        window.uiManager.clearSession();
-        window.speechManager.start();
-        window.uiManager.setRecordingState(true);
-    });
+// ── Stop session ──────────────────────────────────────────────
+function stopSession() {
+    if (speechMgr) { speechMgr.stop(); speechMgr = null; }
+    ui.setRecordingState(false);
+    ui.showAiThinking(); // Show "generating summary…"
 
-    stopBtn.addEventListener('click', () => {
-        window.speechManager.stop();
-        window.uiManager.setRecordingState(false);
+    if (wsClient && wsClient.isConnected) {
+        wsClient.send({ type: 'end_session' });
+        ui.showToast('Generating visit summary… this may take a moment', 'info');
+    } else {
+        ui.hideAiThinking();
+        ui.showToast('Session ended. No connection to server.', 'warning');
+        resetSession();
+    }
+}
 
-        // Send end_session message
-        if (window.sessionId) {
-            window.wsClient.send({
-                type: 'end_session',
-                session_id: window.sessionId
-            });
-        }
-    });
+// ── Reset ─────────────────────────────────────────────────────
+function resetSession() {
+    try { if (wsClient)  { wsClient.disconnect();  } } catch(e) {}
+    try { if (speechMgr) { speechMgr.stop();       } } catch(e) {}
+    wsClient         = null;
+    speechMgr        = null;
+    currentSessionId = null;
+    ui.setRecordingState(false);
+    ui.hideAiThinking();
+}
 
-    // Set up language selection
-    const languageSelect = document.getElementById('language');
-    window.currentLanguage = 'en';
+// ── Transcript callback ───────────────────────────────────────
+function onTranscript(text, isFinal) {
+    ui.updateTranscript(text, isFinal);
 
-    languageSelect.addEventListener('change', (e) => {
-        window.currentLanguage = e.target.value;
+    if (isFinal && wsClient && wsClient.isConnected) {
+        ui.showAiThinking();
+        wsClient.send({
+            type: 'transcript',
+            text: text,
+            language: selectedLanguage
+        });
+    }
+}
 
-        // Show/hide translation panel
-        if (window.currentLanguage !== 'en') {
-            document.getElementById('translation-panel').classList.remove('hidden');
-        } else {
-            document.getElementById('translation-panel').classList.add('hidden');
-        }
-    });
+// ── Server message handler ────────────────────────────────────
+function handleServerMessage(data) {
+    switch (data.type) {
 
-    // Set up summary modal close button
-    const summaryModal = document.getElementById('summary-modal');
-    const closeBtn = summaryModal.querySelector('.close');
-    closeBtn.addEventListener('click', () => {
-        summaryModal.classList.add('hidden');
-    });
+        case 'session_created':
+            currentSessionId = data.session_id;
+            console.log('[App] Session created:', currentSessionId);
+            break;
 
-    // Close modal when clicking outside
-    window.addEventListener('click', (e) => {
-        if (e.target === summaryModal) {
-            summaryModal.classList.add('hidden');
-        }
-    });
+        case 'simplification':
+            ui.hideAiThinking();
+            if (Array.isArray(data.terms)) {
+                data.terms.forEach(t => ui.addSimplification(t.term, t.explanation));
+            }
+            break;
+
+        case 'questions':
+            if (Array.isArray(data.suggestions)) {
+                ui.updateQuestions(data.suggestions);
+            }
+            break;
+
+        case 'translation':
+            if (data.text) ui.showTranslation(data.text);
+            break;
+
+        case 'summary':
+            ui.hideAiThinking();
+            if (data.data) ui.displaySummary(data.data);
+            setTimeout(() => { if (wsClient) { wsClient.disconnect(); wsClient = null; } }, 500);
+            break;
+
+        case 'error':
+            ui.hideAiThinking();
+            ui.showError(data.message || 'An error occurred');
+            setTimeout(() => resetSession(), 400);
+            break;
+
+        case 'pong':
+            // Heartbeat — no action needed
+            break;
+
+        default:
+            console.log('[App] Unknown message type:', data.type);
+    }
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', initApp);
+
+window.addEventListener('beforeunload', () => {
+    try { if (speechMgr) speechMgr.stop(); } catch(e) {}
+    try { if (wsClient)  wsClient.disconnect(); } catch(e) {}
 });
