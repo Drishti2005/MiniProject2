@@ -23,9 +23,26 @@ class UIManager {
      * @param {boolean} isFinal - Whether this is a final result
      */
     updateTranscript(text, isFinal) {
-        // TODO: Append text to transcript panel
-        // TODO: Auto-scroll to bottom
-        // TODO: Style differently for interim vs final results
+        if (!this.transcriptContent) return;
+
+        if (isFinal) {
+            const p = document.createElement('p');
+            p.className = 'transcript-final';
+            p.textContent = text;
+            this.transcriptContent.appendChild(p);
+        } else {
+            // Update or create interim result element
+            let interim = this.transcriptContent.querySelector('.transcript-interim');
+            if (!interim) {
+                interim = document.createElement('p');
+                interim.className = 'transcript-interim';
+                this.transcriptContent.appendChild(interim);
+            }
+            interim.textContent = text;
+        }
+
+        // Auto-scroll to bottom
+        this.transcriptContent.scrollTop = this.transcriptContent.scrollHeight;
     }
 
     /**
@@ -35,9 +52,30 @@ class UIManager {
      * @param {string} explanation - Plain-language explanation
      */
     addSimplification(term, explanation) {
-        // TODO: Create term element with highlighting
-        // TODO: Add to terms panel
-        // TODO: Animate entry
+        if (!this.termsContent) return;
+
+        const termDiv = document.createElement('div');
+        termDiv.className = 'term-item';
+        
+        const termSpan = document.createElement('span');
+        termSpan.className = 'term-highlight';
+        termSpan.textContent = term;
+        
+        const explanationSpan = document.createElement('span');
+        explanationSpan.className = 'term-explanation';
+        explanationSpan.textContent = `: ${explanation}`;
+        
+        termDiv.appendChild(termSpan);
+        termDiv.appendChild(explanationSpan);
+        
+        // Animate entry
+        termDiv.style.opacity = '0';
+        this.termsContent.appendChild(termDiv);
+        
+        setTimeout(() => {
+            termDiv.style.transition = 'opacity 0.3s ease-in';
+            termDiv.style.opacity = '1';
+        }, 10);
     }
 
     /**
@@ -46,8 +84,17 @@ class UIManager {
      * @param {Array<string>} questions - List of questions
      */
     updateQuestions(questions) {
-        // TODO: Clear existing questions
-        // TODO: Add new questions as numbered list
+        if (!this.questionsContent) return;
+
+        // Clear existing questions
+        this.questionsContent.innerHTML = '';
+
+        // Add new questions as numbered list
+        questions.forEach((question) => {
+            const li = document.createElement('li');
+            li.textContent = question;
+            this.questionsContent.appendChild(li);
+        });
     }
 
     /**
@@ -56,8 +103,10 @@ class UIManager {
      * @param {string} text - Translated text
      */
     showTranslation(text) {
-        // TODO: Display text in translation panel
-        // TODO: Make panel visible
+        if (!this.translationContent || !this.translationPanel) return;
+
+        this.translationContent.textContent = text;
+        this.translationPanel.classList.remove('hidden');
     }
 
     /**
@@ -66,8 +115,32 @@ class UIManager {
      * @param {Object} summary - Summary data object
      */
     displaySummary(summary) {
-        // TODO: Format summary with all fields
-        // TODO: Show modal
+        if (!this.summaryContent || !this.summaryModal) return;
+
+        // Format summary with all fields
+        const fields = [
+            { label: 'Title', value: summary.title },
+            { label: 'Diagnosis', value: summary.diagnosis },
+            { label: 'Medications', value: summary.medications },
+            { label: 'Instructions', value: summary.instructions },
+            { label: 'Follow-up', value: summary.follow_up },
+            { label: 'Key Points', value: summary.key_points }
+        ];
+
+        let html = '';
+        fields.forEach(field => {
+            if (field.value) {
+                html += `
+                    <div class="summary-field">
+                        <strong>${field.label}:</strong>
+                        <p>${field.value}</p>
+                    </div>
+                `;
+            }
+        });
+
+        this.summaryContent.innerHTML = html;
+        this.summaryModal.classList.remove('hidden');
     }
 
     /**
@@ -76,8 +149,19 @@ class UIManager {
      * @param {boolean} isRecording - Whether recording is active
      */
     setRecordingState(isRecording) {
-        // TODO: Toggle recording indicator
-        // TODO: Enable/disable buttons
+        const startBtn = document.getElementById('start-recording');
+        const stopBtn = document.getElementById('stop-recording');
+        const indicator = document.getElementById('recording-indicator');
+
+        if (isRecording) {
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            indicator.classList.remove('hidden');
+        } else {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            indicator.classList.add('hidden');
+        }
     }
 
     /**
@@ -86,14 +170,33 @@ class UIManager {
      * @param {string} message - Error message
      */
     showError(message) {
-        // TODO: Display error notification
+        // Create error notification
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-notification';
+        errorDiv.textContent = message;
+        
+        document.body.appendChild(errorDiv);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            errorDiv.style.opacity = '0';
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 300);
+        }, 5000);
     }
 
     /**
      * Clear session UI for new session
      */
     clearSession() {
-        // TODO: Clear all panels
-        // TODO: Reset UI state
+        if (this.transcriptContent) this.transcriptContent.innerHTML = '';
+        if (this.termsContent) this.termsContent.innerHTML = '';
+        if (this.questionsContent) this.questionsContent.innerHTML = '';
+        if (this.translationContent) this.translationContent.textContent = '';
+        if (this.translationPanel) this.translationPanel.classList.add('hidden');
+        if (this.summaryModal) this.summaryModal.classList.add('hidden');
     }
 }
