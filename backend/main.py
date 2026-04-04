@@ -6,6 +6,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
 import os
 import sys
 from dotenv import load_dotenv
@@ -149,6 +150,19 @@ async def serve_frontend():
         raise HTTPException(status_code=500, detail="Failed to load application")
 
 
+@app.get("/history")
+async def serve_history():
+    """Serve the session history HTML page"""
+    try:
+        history_page = os.path.join(frontend_dir, "history.html")
+        if os.path.exists(history_page):
+            return FileResponse(history_page)
+        else:
+            raise HTTPException(status_code=404, detail="History page not found")
+    except Exception as e:
+        logger.error(f"Failed to serve history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load history page")
+
 @app.get("/api/sessions")
 async def list_sessions():
     """Return list of all sessions"""
@@ -281,86 +295,85 @@ async def handle_transcript(websocket: WebSocket, session_id: str, message: dict
     - Call Gemini for question suggestions
     - Handle translation if needed
     """
-    with PerformanceTimer("handle_transcript", threshold_ms=2000):  # 2 second threshold
-        try:
-            # Validate message structure
-            is_valid, error_msg = validate_websocket_message(message)
-            if not is_valid:
-                logger.warning(f"Invalid WebSocket message: {error_msg}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": error_msg
-                })
-                return
+    try:
+        # Validate message structure
+        is_valid, error_msg = validate_websocket_message(message)
+        if not is_valid:
+            logger.warning(f"Invalid WebSocket message: {error_msg}")
+            await websocket.send_json({
+                "type": "error",
+                "message": error_msg
+            })
+            return
+        
+        # Validate and sanitize message
+        transcript_msg = TranscriptMessage(**message)
+        text = sanitize_text_input(transcript_msg.text)
+        language = transcript_msg.language
+        
+        # Store transcript chunk in database
+        await db.add_transcript_chunk(session_id, text)
+        
+        # Add to full transcript for context
+        full_transcript.append(text)
+        
+        # Call Gemini for simplification
+        # gemini.simplify_terms() returns List[dict] with 'term' and 'explanation'
+        simplifications = await gemini.simplify_terms(text)
+        
+        if simplifications:  # It's already a list
+            # Store simplifications in database
+            for term_data in simplifications:
+                await db.add_simplification(
+                    session_id,
+                    term_data["term"],
+                    term_data["explanation"]
+                )
             
-            # Validate and sanitize message
-            transcript_msg = TranscriptMessage(**message)
-            text = sanitize_text_input(transcript_msg.text)
-            language = transcript_msg.language
+            # Send simplifications to frontend
+            await websocket.send_json({
+                "type": "simplification",
+                "terms": simplifications
+            })
             
-            # Store transcript chunk in database
-            with PerformanceTimer("store_transcript", threshold_ms=500):
-                await db.add_transcript_chunk(session_id, text)
-            
-            # Add to full transcript for context
-            full_transcript.append(text)
-            
-            # Call Gemini for simplification
-            with PerformanceTimer("gemini_simplify", threshold_ms=1500):
-                simplifications = await gemini.simplify_terms(text)
-            
-            if simplifications and simplifications.get("terms"):
-                # Store simplifications in database
-                for term_data in simplifications["terms"]:
-                    await db.add_simplification(
-                        session_id,
-                        term_data["term"],
-                        term_data["explanation"]
+            # Handle translation if non-English language
+            if language != "en":
+                for term_data in simplifications:
+                    translated = await gemini.translate_text(
+                        term_data["explanation"],
+                        language
                     )
-                
-                # Send simplifications to frontend
-                await websocket.send_json({
-                    "type": "simplification",
-                    "terms": simplifications["terms"]
-                })
-                
-                # Handle translation if non-English language
-                if language != "en":
-                    for term_data in simplifications["terms"]:
-                        translated = await gemini.translate_text(
-                            term_data["explanation"],
-                            language
-                        )
-                        if translated:
-                            await websocket.send_json({
-                                "type": "translation",
-                                "text": translated,
-                                "original_term": term_data["term"]
-                            })
+                    if translated:
+                        await websocket.send_json({
+                            "type": "translation",
+                            "text": translated,
+                            "original_term": term_data["term"]
+                        })
+        
+        # Generate question suggestions if we have enough context
+        if len(full_transcript) >= 3:
+            # gemini.suggest_questions() returns List[str]
+            questions = await gemini.suggest_questions(" ".join(full_transcript))
             
-            # Generate question suggestions if we have enough context
-            if len(full_transcript) >= 3:
-                questions = await gemini.suggest_questions(" ".join(full_transcript))
-                
-                if questions and questions.get("questions"):
-                    await websocket.send_json({
-                        "type": "questions",
-                        "suggestions": questions["questions"]
-                    })
-        
-        except ValidationError as e:
-            logger.warning(f"Invalid transcript message format: {e}")
-            await websocket.send_json({
-                "type": "error",
-                "message": "Invalid message format"
-            })
-        
-        except Exception as e:
-            logger.error(f"Error handling transcript: {e}")
-            await websocket.send_json({
-                "type": "error",
-                "message": "Failed to process transcript"
-            })
+            if questions:  # It's already a list
+                await websocket.send_json({
+                    "type": "questions",
+                    "suggestions": questions
+                })
+    
+    except ValidationError as e:
+        logger.warning(f"Invalid transcript message format: {e}")
+        await websocket.send_json({
+            "type": "error",
+            "message": "Invalid message format"
+        })
+    
+    except Exception as e:
+        logger.error(f"Error handling transcript: {e}", exc_info=True)
+        await websocket.send_json({
+            "type": "error",
+            "message": "Failed to process transcript"
+        })
 
 
 async def handle_end_session(websocket: WebSocket, session_id: str, full_transcript: list):
