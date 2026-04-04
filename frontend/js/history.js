@@ -270,7 +270,7 @@ function renderSessionDetail(container, session) {
             summaryHtml += `
                 <div class="summary-section">
                     <div class="summary-section-label">Chief Complaint</div>
-                    <p class="summary-text">${escapeHtml(summary.chief_complaint)}</p>
+                    <p class="summary-text">${escapeHtml(summary.diagnosis)}</p>
                 </div>`;
         }
         if (summary.key_points && summary.key_points.length) {
