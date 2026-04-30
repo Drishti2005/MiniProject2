@@ -49,33 +49,40 @@ logging.basicConfig(
 )
 logger = SanitizingLogger(__name__)
 
-# Import AI service - tries real service first, falls back to mock
+# Import AI service — new engine in src/ai_engine with Gemini + Groq support
+# Falls back gracefully through providers based on .env configuration
 try:
-    # Try to import real AI service (from AI Integration team)
-    from ai_service.gemini_service import GeminiService
-    logger.info("Using REAL Gemini AI service")
-except ImportError:
+    src_path = os.path.join(parent_dir, 'src')
+    if src_path not in sys.path:
+        sys.path.insert(0, src_path)
+    from ai_engine import create_ai_service as _create_ai_service
+    logger.info("AI engine loaded (Gemini + Groq with auto-fallback)")
+    _USE_NEW_ENGINE = True
+except Exception as _engine_err:
+    logger.warning(f"New AI engine unavailable ({_engine_err}), falling back to legacy service")
+    _USE_NEW_ENGINE = False
+    # Legacy fallback chain
     try:
-        # Fall back to mock service for testing
-        from ai_service.gemini_service_mock import GeminiService
-        logger.info("Using MOCK Gemini AI service (for testing)")
+        from ai_service.gemini_service import GeminiService
+        logger.info("Using legacy Gemini AI service")
     except ImportError:
-        # Try alternative import path for mock
-        import sys
-        import os
-        ai_service_path = os.path.join(parent_dir, 'ai-service')
-        if ai_service_path not in sys.path:
-            sys.path.insert(0, ai_service_path)
-        from gemini_service_mock import GeminiService
-        logger.info("Using MOCK Gemini AI service (for testing)")
+        try:
+            from ai_service.gemini_service_mock import GeminiService
+            logger.info("Using MOCK Gemini AI service (for testing)")
+        except ImportError:
+            ai_service_path = os.path.join(parent_dir, 'ai-service')
+            if ai_service_path not in sys.path:
+                sys.path.insert(0, ai_service_path)
+            from gemini_service_mock import GeminiService
+            logger.info("Using MOCK Gemini AI service (fallback)")
 
 # Check if we're running in test mode
 import sys
 TESTING = 'pytest' in sys.modules or 'unittest' in sys.modules
 
 if not TESTING:
-    if not GEMINI_API_KEY:
-        logger.critical("GEMINI_API_KEY environment variable is required")
+    if not GEMINI_API_KEY and not os.getenv("GROQ_API_KEY"):
+        logger.critical("At least one AI API key is required: GEMINI_API_KEY or GROQ_API_KEY")
         sys.exit(1)
 
     if not DATABASE_URL:
@@ -98,15 +105,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize services - must be done after loading env vars
-# Use SQLite-compatible database service
-# For tests, use default values if env vars are missing
+# Initialize services
 if TESTING:
     db = DatabaseService(DATABASE_URL or "sqlite:///test.db")
-    gemini = GeminiService(GEMINI_API_KEY or "test-key")
+    if _USE_NEW_ENGINE:
+        try:
+            gemini = _create_ai_service()
+        except Exception:
+            from ai_service.gemini_service_mock import GeminiService
+            gemini = GeminiService("test-key")
+    else:
+        gemini = GeminiService(GEMINI_API_KEY or "test-key")
 else:
     db = DatabaseService(DATABASE_URL)
-    gemini = GeminiService(GEMINI_API_KEY)
+    if _USE_NEW_ENGINE:
+        gemini = _create_ai_service()
+    else:
+        gemini = GeminiService(GEMINI_API_KEY)
 
 # Store active WebSocket connections and their session IDs
 active_connections: Dict[WebSocket, str] = {}
@@ -240,6 +255,7 @@ async def websocket_endpoint(websocket: WebSocket):
         
         # Accumulate transcript for context
         full_transcript = []
+        session_language = language  # tracks current language, updated by language_change
         
         while True:
             # Receive message from frontend
@@ -249,18 +265,33 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.debug(f"Received message type: {message_type} for session {session_id}")
             
             if message_type == "transcript":
-                await handle_transcript(websocket, session_id, message, full_transcript)
-                
+                session_language = await handle_transcript(websocket, session_id, message, full_transcript, session_language)
+
             elif message_type == "end_session":
                 await handle_end_session(websocket, session_id, full_transcript)
                 break
-                
+
+            elif message_type == "ping":
+                # Heartbeat — respond with pong
+                await websocket.send_json({"type": "pong"})
+
+            elif message_type == "language_change":
+                # Update session language so future translations use the right target
+                new_lang = message.get("language", "en")
+                session_language = new_lang
+                logger.info(f"Language changed to {new_lang} for session {session_id}")
+
+            elif message_type == "question_ask":
+                # Patient clicked a suggested question — get AI explanation for it
+                await handle_question_ask(websocket, session_id, message, full_transcript, session_language)
+
+            elif message_type == "doctor_reply":
+                # Doctor typed/spoke a reply to a patient question — simplify + translate it
+                await handle_doctor_reply(websocket, session_id, message, session_language)
+
             else:
-                # Unknown message type
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"Unknown message type: {message_type}"
-                })
+                # Unknown message type — log but don't error-out the session
+                logger.warning(f"Unknown message type: {message_type}")
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session {session_id}")
@@ -286,94 +317,109 @@ async def websocket_endpoint(websocket: WebSocket):
             del active_connections[websocket]
 
 
-async def handle_transcript(websocket: WebSocket, session_id: str, message: dict, full_transcript: list):
+async def handle_transcript(websocket: WebSocket, session_id: str, message: dict, full_transcript: list, session_language: str = "en") -> str:
     """
-    Handle transcript message from frontend
-    
-    - Store transcript in database
-    - Call Gemini for simplification
-    - Call Gemini for question suggestions
-    - Handle translation if needed
+    Handle transcript message. Returns the (possibly updated) session_language.
     """
     try:
-        # Validate message structure
+        msg_language = message.get("language", session_language)
+        message["language"] = msg_language
+
         is_valid, error_msg = validate_websocket_message(message)
         if not is_valid:
             logger.warning(f"Invalid WebSocket message: {error_msg}")
-            await websocket.send_json({
-                "type": "error",
-                "message": error_msg
-            })
-            return
-        
-        # Validate and sanitize message
+            await websocket.send_json({"type": "error", "message": error_msg})
+            return session_language
+
         transcript_msg = TranscriptMessage(**message)
-        text = sanitize_text_input(transcript_msg.text)
+        text     = sanitize_text_input(transcript_msg.text)
         language = transcript_msg.language
-        
-        # Store transcript chunk in database
+
+        # Sync session_language with what the client sends
+        if language and language != "en":
+            session_language = language
+
+        if not text:
+            return session_language
+
+        # Store transcript chunk
         await db.add_transcript_chunk(session_id, text)
-        
-        # Add to full transcript for context
         full_transcript.append(text)
-        
-        # Call Gemini for simplification
-        # gemini.simplify_terms() returns List[dict] with 'term' and 'explanation'
-        simplifications = await gemini.simplify_terms(text)
-        
-        if simplifications:  # It's already a list
-            # Store simplifications in database
-            for term_data in simplifications:
-                await db.add_simplification(
-                    session_id,
-                    term_data["term"],
-                    term_data["explanation"]
-                )
-            
-            # Send simplifications to frontend
+
+        # ── Single combined LLM call ──────────────────────────
+        # Returns: { medical_terms, suggested_questions, session_summary }
+        insights = await gemini.get_insights(text)
+
+        medical_terms       = insights.get("medical_terms", [])
+        suggested_questions = insights.get("suggested_questions", [])
+
+        # ── Emit Terms Explained ──────────────────────────────
+        if medical_terms:
+            for t in medical_terms:
+                if isinstance(t, dict) and "term" in t and "explanation" in t:
+                    await db.add_simplification(session_id, t["term"], t["explanation"])
+
             await websocket.send_json({
-                "type": "simplification",
-                "terms": simplifications
+                "type":  "simplification",
+                "terms": medical_terms,
             })
-            
-            # Handle translation if non-English language
-            if language != "en":
-                for term_data in simplifications:
-                    translated = await gemini.translate_text(
-                        term_data["explanation"],
-                        language
-                    )
-                    if translated:
-                        await websocket.send_json({
-                            "type": "translation",
-                            "text": translated,
-                            "original_term": term_data["term"]
-                        })
-        
-        # Generate question suggestions if we have enough context
-        if len(full_transcript) >= 3:
-            # gemini.suggest_questions() returns List[str]
-            questions = await gemini.suggest_questions(" ".join(full_transcript))
-            
-            if questions:  # It's already a list
+
+        # ── Translation: translate the FULL transcript phrase ─
+        # This gives a proper bilingual transcript, not just term snippets
+        if language != "en":
+            translated_phrase = await gemini.translate_text(text, language)
+            if translated_phrase and translated_phrase != text:
                 await websocket.send_json({
-                    "type": "questions",
-                    "suggestions": questions
+                    "type":     "transcript_translation",
+                    "original": text,
+                    "translated": translated_phrase,
+                    "language": language,
                 })
-    
+
+        # ── Emit Patient Prompts ──────────────────────────────
+        if suggested_questions:
+            # If non-English, translate each question so patient can read/hear it
+            if language != "en":
+                bilingual_questions = []
+                for q in suggested_questions:
+                    translated_q = await gemini.translate_text(q, language)
+                    bilingual_questions.append({
+                        "english":    q,
+                        "translated": translated_q if translated_q and translated_q != q else None,
+                        "language":   language,
+                    })
+                await websocket.send_json({
+                    "type":        "questions",
+                    "suggestions": bilingual_questions,
+                    "bilingual":   True,
+                })
+            else:
+                await websocket.send_json({
+                    "type":        "questions",
+                    "suggestions": suggested_questions,
+                    "bilingual":   False,
+                })
+
+        # ── Emit session_info update (phrase + AI request counts) ─
+        await websocket.send_json({
+            "type":         "session_info",
+            "phrase_count": len(full_transcript),
+            "ai_requests":  len(full_transcript),
+        })
+        return session_language
+
     except ValidationError as e:
         logger.warning(f"Invalid transcript message format: {e}")
-        await websocket.send_json({
-            "type": "error",
-            "message": "Invalid message format"
-        })
-    
+        await websocket.send_json({"type": "error", "message": "Invalid message format"})
+        return session_language
+
     except Exception as e:
         logger.error(f"Error handling transcript: {e}", exc_info=True)
         await websocket.send_json({
-            "type": "error",
-            "message": "Failed to process transcript"
+            "type":    "ai_error",
+            "message": "AI analysis temporarily unavailable. Transcription continues.",
         })
+        return session_language
 
 
 async def handle_end_session(websocket: WebSocket, session_id: str, full_transcript: list):
@@ -437,6 +483,132 @@ async def handle_end_session(websocket: WebSocket, session_id: str, full_transcr
             pass
 
 
+async def handle_question_ask(websocket: WebSocket, session_id: str, message: dict, full_transcript: list, session_language: str):
+    """
+    Patient clicked a suggested question.
+    1. Store it as a transcript chunk (so it's part of the session record)
+    2. Ask the AI to explain the answer in plain language
+    3. Send back a question_explanation event
+    4. Translate if non-English
+    """
+    try:
+        question = message.get("question", "").strip()
+        if not question:
+            return
+
+        # Add to transcript so the summary includes it
+        full_transcript.append(f"[Patient question] {question}")
+        await db.add_transcript_chunk(session_id, f"[Patient question] {question}")
+
+        # Ask AI to explain the answer
+        explanation = await gemini.explain_question(question, " ".join(full_transcript))
+
+        await websocket.send_json({
+            "type":        "question_explanation",
+            "question":    question,
+            "explanation": explanation,
+        })
+
+        # Translate explanation if non-English
+        if session_language != "en" and explanation:
+            translated = await gemini.translate_text(explanation, session_language)
+            if translated and translated != explanation:
+                await websocket.send_json({
+                    "type":        "question_explanation_translated",
+                    "question":    question,
+                    "explanation": translated,
+                    "language":    session_language,
+                })
+
+    except Exception as e:
+        logger.error(f"Error handling question_ask: {e}", exc_info=True)
+        await websocket.send_json({
+            "type":    "ai_error",
+            "message": "Could not generate explanation for that question.",
+        })
+
+
+async def handle_doctor_reply(websocket: WebSocket, session_id: str, message: dict, session_language: str):
+    """
+    Doctor typed/spoke a reply to a patient question.
+    1. Store it as a transcript chunk
+    2. Simplify any medical terms in the reply
+    3. Translate if non-English
+    4. Send back doctor_reply_simplified event
+    """
+    try:
+        reply    = message.get("reply", "").strip()
+        question = message.get("question", "")
+        if not reply:
+            return
+
+        await db.add_transcript_chunk(session_id, f"[Doctor reply] {reply}")
+
+        # Simplify the doctor's reply
+        insights = await gemini.get_insights(reply)
+        terms    = insights.get("medical_terms", [])
+
+        # Translate the reply if non-English — include in the same event
+        translated_reply = None
+        if session_language != "en":
+            translated_reply = await gemini.translate_text(reply, session_language)
+            if translated_reply == reply:
+                translated_reply = None
+
+        await websocket.send_json({
+            "type":             "doctor_reply_simplified",
+            "question":         question,
+            "reply":            reply,
+            "reply_translated": translated_reply,
+            "language":         session_language,
+            "terms":            terms,
+        })
+
+    except Exception as e:
+        logger.error(f"Error handling doctor_reply: {e}", exc_info=True)
+        await websocket.send_json({
+            "type":    "ai_error",
+            "message": "Could not simplify the doctor's reply.",
+        })
+
+
+# TTS proxy — fetches audio from Google Translate and streams it back
+# Avoids CORS/autoplay issues when playing from the frontend
+@app.get("/api/tts")
+async def tts_proxy(text: str, lang: str = "hi"):
+    """Proxy Google Translate TTS audio to avoid CORS issues in the browser."""
+    import httpx
+    from fastapi.responses import StreamingResponse
+
+    # Validate lang code — only allow 2-3 char ISO codes
+    import re
+    if not re.match(r'^[a-z]{2,3}(-[A-Za-z]{2,4})?$', lang):
+        raise HTTPException(status_code=400, detail="Invalid language code")
+
+    # Truncate to 200 chars (GT limit)
+    text = text[:200]
+
+    url = "https://translate.google.com/translate_tts"
+    params = {"ie": "UTF-8", "q": text, "tl": lang, "client": "tw-ob"}
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; Sidekick/1.0)"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="TTS service unavailable")
+            return StreamingResponse(
+                iter([resp.content]),
+                media_type="audio/mpeg",
+                headers={"Cache-Control": "no-store"},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="TTS request timed out")
+    except Exception as e:
+        logger.error(f"TTS proxy error: {e}")
+        raise HTTPException(status_code=502, detail="TTS unavailable")
+
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
@@ -445,4 +617,15 @@ async def health_check():
         "status": "healthy",
         "service": "Sidekick Medical Assistant",
         "version": "1.0.0"
+    }
+
+
+@app.get("/api/health/ai")
+async def ai_health():
+    """Returns which AI provider is currently active."""
+    provider = getattr(gemini, "active_provider", type(gemini).__name__)
+    return {
+        "status":   "ok",
+        "provider": provider,
+        "engine":   "new" if _USE_NEW_ENGINE else "legacy",
     }

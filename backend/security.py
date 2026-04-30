@@ -68,21 +68,18 @@ def validate_session_id(session_id: str) -> bool:
 
 def validate_language_code(language: str) -> bool:
     """
-    Validate language code (ISO 639-1)
-    
-    Args:
-        language: Language code to validate
-    
-    Returns:
-        True if valid, False otherwise
-    
-    Requirements: 14.4
+    Validate language code (ISO 639-1).
+    Accepts all languages supported by the application.
     """
-    # Common language codes
+    if not language or not isinstance(language, str):
+        return False
+    # Comprehensive set of valid ISO 639-1 codes
     valid_languages = {
         'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko',
         'ar', 'hi', 'bn', 'pa', 'te', 'mr', 'ta', 'ur', 'gu', 'kn',
-        'ml', 'or', 'as', 'ne', 'si', 'my', 'km', 'lo', 'th', 'vi'
+        'ml', 'or', 'as', 'ne', 'si', 'my', 'km', 'lo', 'th', 'vi',
+        'tr', 'pl', 'nl', 'sv', 'da', 'fi', 'no', 'cs', 'sk', 'hu',
+        'ro', 'bg', 'hr', 'sr', 'uk', 'he', 'fa', 'ms', 'id', 'tl',
     }
     return language.lower() in valid_languages
 
@@ -219,7 +216,7 @@ def validate_websocket_message(message: Dict[str, Any]) -> tuple[bool, str]:
         return False, "Message must have a 'type' field"
     
     message_type = message.get("type")
-    valid_types = ["transcript", "end_session", "language_change", "ping"]
+    valid_types = ["transcript", "end_session", "language_change", "ping", "question_ask", "doctor_reply"]
     
     if message_type not in valid_types:
         return False, f"Invalid message type: {message_type}"

@@ -254,28 +254,34 @@ class DatabaseService:
 
     async def get_all_sessions(self) -> List[Dict]:
         """
-        Retrieve all sessions ordered by created_at descending
-
-        Returns:
-            List of session dictionaries with basic info
+        Retrieve all sessions ordered by created_at descending.
+        Includes transcript_count and has_summary for the history list UI.
         """
         try:
             sessions = []
-            
             async with aiosqlite.connect(self.db_path) as db:
                 db.row_factory = aiosqlite.Row
-                async with db.execute(
-                    "SELECT id, title, language, created_at, ended_at FROM sessions ORDER BY created_at DESC"
-                ) as cursor:
+                async with db.execute("""
+                    SELECT
+                        s.id, s.title, s.language, s.created_at, s.ended_at,
+                        COUNT(DISTINCT tc.id)  AS transcript_count,
+                        COUNT(DISTINCT su.id)  AS summary_count
+                    FROM sessions s
+                    LEFT JOIN transcript_chunks tc ON tc.session_id = s.id
+                    LEFT JOIN summaries su ON su.session_id = s.id
+                    GROUP BY s.id
+                    ORDER BY s.created_at DESC
+                """) as cursor:
                     async for row in cursor:
                         sessions.append({
-                            "id": row["id"],
-                            "title": row["title"],
-                            "language": row["language"],
-                            "created_at": row["created_at"],
-                            "ended_at": row["ended_at"]
+                            "id":               row["id"],
+                            "title":            row["title"],
+                            "language":         row["language"],
+                            "created_at":       row["created_at"],
+                            "ended_at":         row["ended_at"],
+                            "transcript_count": row["transcript_count"],
+                            "has_summary":      row["summary_count"] > 0,
                         })
-            
             return sessions
         except Exception as e:
             logger.error(f"Failed to get all sessions: {e}")

@@ -1,6 +1,17 @@
 // TEAM: Frontend
 // Speech recognition module using Web Speech API
 
+// Maps ISO 639-1 codes to BCP-47 language tags for Web Speech API
+function _speechLangCode(code) {
+    const map = {
+        en: 'en-US', hi: 'hi-IN', es: 'es-ES', fr: 'fr-FR',
+        de: 'de-DE', zh: 'zh-CN', ar: 'ar-SA', bn: 'bn-IN',
+        ta: 'ta-IN', te: 'te-IN', mr: 'mr-IN', gu: 'gu-IN',
+        pt: 'pt-BR', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR',
+    };
+    return map[code] || 'en-US';
+}
+
 class SpeechRecognitionManager {
     /**
      * Manages browser-based speech recognition
@@ -28,7 +39,7 @@ class SpeechRecognitionManager {
     /**
      * Start speech recognition in continuous mode with interim results
      */
-    start() {
+    start(langCode = 'en') {
         if (!this.isSupported()) {
             this.onError('Speech recognition is not supported in this browser. Please use Chrome.');
             return;
@@ -39,16 +50,21 @@ class SpeechRecognitionManager {
 
         this.recognition.continuous = true;
         this.recognition.interimResults = true;
-        this.recognition.lang = 'en-US';
+        // Use the selected language for recognition — falls back to en-US
+        this.recognition.lang = _speechLangCode(langCode);
         this.recognition.maxAlternatives = 1;
 
-        this.recognition.onresult = (event) => this.handleResult(event);
+        this.recognition.onresult = (event) => {
+            // Drop results while muted (TTS playing)
+            if (this._paused) return;
+            this.handleResult(event);
+        };
         this.recognition.onerror  = (event) => this.handleError(event);
         this.recognition.onend    = () => {
-            // Auto-restart if still in recording mode
-            if (this.isRecording) {
+            // Auto-restart unless stopped intentionally or paused for TTS
+            if (this.isRecording && !this._paused) {
                 setTimeout(() => {
-                    if (this.isRecording && this.recognition) {
+                    if (this.isRecording && !this._paused && this.recognition) {
                         try { this.recognition.start(); } catch(e) {}
                     }
                 }, 200);
@@ -63,6 +79,38 @@ class SpeechRecognitionManager {
             this.onError('Could not start speech recognition: ' + e.message);
         }
     }
+
+    /**
+     * Temporarily pause recognition while TTS is speaking.
+     * Sets a flag so the onend auto-restart doesn't fire.
+     */
+    pause() {
+        this._paused = true;
+        if (this.recognition) {
+            try { this.recognition.stop(); } catch(e) {}
+        }
+    }
+
+    /**
+     * Resume recognition after TTS finishes.
+     * Waits 800ms for audio echo to die down before restarting.
+     */
+    resume() {
+        // Extra delay so mic doesn't pick up room echo of the TTS audio
+        setTimeout(() => {
+            this._paused = false;
+            if (this.isRecording && this.recognition) {
+                setTimeout(() => {
+                    if (this.isRecording && !this._paused) {
+                        try { this.recognition.start(); } catch(e) {}
+                    }
+                }, 200);
+            }
+        }, 800);
+    }
+
+    /** True while TTS is playing — used by app.js to block transcript sends */
+    get isMuted() { return !!this._paused; }
 
     /**
      * Stop speech recognition and clean up
