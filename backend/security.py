@@ -69,12 +69,19 @@ def validate_session_id(session_id: str) -> bool:
 def validate_language_code(language: str) -> bool:
     """
     Validate language code (ISO 639-1).
-    Accepts any 2-3 character code to avoid blocking valid languages.
+    Accepts all languages supported by the application.
     """
     if not language or not isinstance(language, str):
         return False
-    # Accept any 2-3 letter ISO code rather than a hardcoded allowlist
-    return bool(re.match(r'^[a-z]{2,3}$', language.lower()))
+    # Comprehensive set of valid ISO 639-1 codes
+    valid_languages = {
+        'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko',
+        'ar', 'hi', 'bn', 'pa', 'te', 'mr', 'ta', 'ur', 'gu', 'kn',
+        'ml', 'or', 'as', 'ne', 'si', 'my', 'km', 'lo', 'th', 'vi',
+        'tr', 'pl', 'nl', 'sv', 'da', 'fi', 'no', 'cs', 'sk', 'hu',
+        'ro', 'bg', 'hr', 'sr', 'uk', 'he', 'fa', 'ms', 'id', 'tl',
+    }
+    return language.lower() in valid_languages
 
 
 def validate_text_input(text: str, max_length: int = 10000) -> tuple[bool, str]:
