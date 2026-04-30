@@ -74,6 +74,11 @@
         </div>
       </div>
       <div class="topbar-right">
+        <!-- AI provider indicator — populated by app.js on load -->
+        <div class="ai-provider-badge" id="ai-provider-badge" title="Active AI provider" aria-label="Active AI provider">
+          <span class="ai-provider-badge-dot" aria-hidden="true"></span>
+          <span id="ai-provider-name">AI</span>
+        </div>
         <div class="language-selector">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
           <label for="language" class="sr-only">Translation language</label>
@@ -125,6 +130,12 @@
             <p>Press <strong>Start Recording</strong> below to begin capturing the appointment conversation.</p>
           </div>
         </div>
+
+        <!-- Connection overlay — shown while WS is connecting -->
+        <div class="connection-overlay" id="connection-overlay" aria-live="polite" aria-label="Connecting to server">
+          <div class="connection-spinner" aria-hidden="true"></div>
+          <p class="connection-overlay-text" id="connection-overlay-text">Connecting to server…</p>
+        </div>
       </section>
 
       <!-- RIGHT: INSIGHTS PANEL -->
@@ -137,6 +148,12 @@
             <div class="insight-icon-wrap terms-icon-wrap" aria-hidden="true">💡</div>
             <h3>Terms Explained</h3>
             <span class="insight-card-count" id="terms-count" style="display:none">0</span>
+          </div>
+          <!-- Importance legend -->
+          <div class="importance-legend" id="importance-legend" style="display:none">
+            <span class="importance-legend-item"><span class="importance-dot high"></span>Critical</span>
+            <span class="importance-legend-item"><span class="importance-dot medium"></span>Important</span>
+            <span class="importance-legend-item"><span class="importance-dot low"></span>General</span>
           </div>
           <div class="insight-card-body">
             <div class="terms-list" id="terms-list">

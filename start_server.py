@@ -11,8 +11,13 @@ import os
 backend_dir = os.path.join(os.path.dirname(__file__), 'backend')
 sys.path.insert(0, backend_dir)
 
-# Add project root to Python path
-sys.path.insert(0, os.path.dirname(__file__))
+# Add project root to Python path (for ai_service package)
+project_root = os.path.dirname(__file__)
+sys.path.insert(0, project_root)
+
+# Add src directory to Python path (for ai_engine package)
+src_dir = os.path.join(project_root, 'src')
+sys.path.insert(0, src_dir)
 
 # Now import and run uvicorn
 import uvicorn
@@ -21,6 +26,7 @@ if __name__ == "__main__":
     print("Starting Sidekick Medical Assistant Backend Server...")
     print("Server will be available at: http://127.0.0.1:8000")
     print("API Documentation: http://127.0.0.1:8000/docs")
+    print("AI Health Check: http://127.0.0.1:8000/api/health/ai")
     print("Press CTRL+C to stop the server")
     print("-" * 60)
     

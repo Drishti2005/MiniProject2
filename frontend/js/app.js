@@ -121,15 +121,69 @@ function initApp() {
     document.getElementById('language')?.addEventListener('change', e => {
         selectedLanguage = e.target.value;
         if (selectedLanguage === 'en') ui.hideTranslation();
+        // Notify backend so it uses the right translation target
+        if (wsClient && wsClient.isConnected) {
+            wsClient.send({ type: 'language_change', language: selectedLanguage });
+        }
+        // Show which language is active
+        const langNames = {
+            hi:'Hindi', es:'Spanish', fr:'French', de:'German', zh:'Chinese',
+            ar:'Arabic', bn:'Bengali', ta:'Tamil', te:'Telugu', mr:'Marathi', gu:'Gujarati'
+        };
+        if (selectedLanguage !== 'en') {
+            ui.showToast(`🌐 Translation: ${langNames[selectedLanguage] || selectedLanguage}`, 'info');
+        }
     });
 
     // Recording buttons
     document.getElementById('start-recording')?.addEventListener('click', startSession);
     document.getElementById('stop-recording')?.addEventListener('click', stopSession);
+
+    // Fetch and display active AI provider
+    fetchAIProvider();
+}
+
+// ── AI Provider Badge ─────────────────────────────────────────
+async function fetchAIProvider() {
+    try {
+        const res = await fetch('/api/health/ai');
+        if (!res.ok) return;
+        const data = await res.json();
+        const badge = document.getElementById('ai-provider-badge');
+        const name  = document.getElementById('ai-provider-name');
+        if (!badge || !name) return;
+        const providerName = data.provider
+            ? data.provider.replace('Provider', '').replace('Service', '')
+            : 'AI';
+        name.textContent = providerName;
+        const isMock = providerName.toLowerCase().includes('mock');
+        const isGroq = providerName.toLowerCase().includes('groq');
+        badge.className = 'ai-provider-badge ' + (isMock ? 'mock' : isGroq ? 'groq' : 'gemini');
+        badge.title = `Active AI provider: ${providerName}`;
+
+        // Show a persistent warning banner if running in demo/mock mode
+        if (isMock) {
+            const existing = document.getElementById('mock-banner');
+            if (!existing) {
+                const banner = document.createElement('div');
+                banner.id = 'mock-banner';
+                banner.className = 'mock-banner';
+                banner.innerHTML = `
+                    <span>⚠️ Demo mode — Gemini quota exhausted.</span>
+                    <span>Add a valid <strong>GROQ_API_KEY</strong> to <code>.env</code> for real AI insights.</span>
+                `;
+                document.querySelector('.topbar')?.after(banner);
+            }
+        }
+    } catch (_) { /* non-critical */ }
 }
 
 // ── Start session ─────────────────────────────────────────────
 function startSession() {
+    // Show connecting overlay
+    const overlay = document.getElementById('connection-overlay');
+    if (overlay) overlay.classList.add('visible');
+
     // Connect WebSocket
     wsClient = new WebSocketClient(WS_URL);
     wsClient.onMessage = handleServerMessage;
@@ -142,6 +196,7 @@ function startSession() {
     );
 
     if (!speechMgr.isSupported()) {
+        if (overlay) overlay.classList.remove('visible');
         ui.showError('Speech recognition is not supported. Please use Google Chrome or Microsoft Edge.');
         resetSession();
         return;
@@ -149,10 +204,12 @@ function startSession() {
 
     // Brief delay to let WS handshake complete
     setTimeout(() => {
-        speechMgr.start();
+        if (overlay) overlay.classList.remove('visible');
+        speechMgr.start(selectedLanguage);
+        window._speechMgr = speechMgr;   // expose for TTS mic-pause
         ui.setRecordingState(true);
         ui.showToast('🎙️ Recording started', 'success');
-    }, 500);
+    }, 600);
 }
 
 // ── Stop session ──────────────────────────────────────────────
@@ -175,15 +232,20 @@ function stopSession() {
 function resetSession() {
     try { if (wsClient)  { wsClient.disconnect();  } } catch(e) {}
     try { if (speechMgr) { speechMgr.stop();       } } catch(e) {}
-    wsClient         = null;
-    speechMgr        = null;
-    currentSessionId = null;
+    wsClient          = null;
+    speechMgr         = null;
+    window._speechMgr = null;
+    currentSessionId  = null;
     ui.setRecordingState(false);
     ui.hideAiThinking();
 }
 
 // ── Transcript callback ───────────────────────────────────────
 function onTranscript(text, isFinal) {
+    // Block transcript display and backend send while TTS is playing
+    // so the spoken audio doesn't appear in the live transcript
+    if (window._speechMgr && window._speechMgr.isMuted) return;
+
     ui.updateTranscript(text, isFinal);
 
     if (isFinal && wsClient && wsClient.isConnected) {
@@ -208,18 +270,71 @@ function handleServerMessage(data) {
         case 'simplification':
             ui.hideAiThinking();
             if (Array.isArray(data.terms)) {
-                data.terms.forEach(t => ui.addSimplification(t.term, t.explanation));
+                data.terms.forEach(t => ui.addSimplification(t.term, t.explanation, t.importance || 'medium'));
+            }
+            break;
+
+        case 'transcript_translation':
+            // Bilingual transcript — attach translation under the matching entry
+            if (data.original && data.translated) {
+                ui.attachTranslationToEntry(data.original, data.translated, data.language);
             }
             break;
 
         case 'questions':
             if (Array.isArray(data.suggestions)) {
-                ui.updateQuestions(data.suggestions);
+                ui.updateQuestions(data.suggestions, data.bilingual || false, (question) => {
+                    // Always send the English version to backend for AI explanation
+                    const englishQ = typeof question === 'object' ? question.english : question;
+                    if (wsClient && wsClient.isConnected) {
+                        wsClient.send({ type: 'question_ask', question: englishQ });
+                        ui.showAiThinking();
+                    }
+                });
             }
             break;
 
         case 'translation':
-            if (data.text) ui.showTranslation(data.text);
+            if (data.text) ui.showTranslation(data.text, selectedLanguage);
+            break;
+
+        case 'question_explanation':
+            ui.hideAiThinking();
+            if (data.question && data.explanation) {
+                ui.showQuestionExplanation(data.question, data.explanation, false, null);
+                window._onDoctorReply = (question, reply) => {
+                    if (wsClient && wsClient.isConnected) {
+                        wsClient.send({ type: 'doctor_reply', question, reply });
+                        ui.showAiThinking();
+                    }
+                };
+            }
+            break;
+
+        case 'question_explanation_translated':
+            if (data.question && data.explanation) {
+                ui.showQuestionExplanation(data.question, data.explanation, true, data.language || selectedLanguage);
+            }
+            break;
+
+        case 'doctor_reply_simplified':
+            ui.hideAiThinking();
+            if (data.reply !== undefined) {
+                const langCode = (data.language && data.language !== 'en') ? data.language : null;
+                ui.showDoctorReplySimplified(
+                    data.question,
+                    data.reply,
+                    data.reply_translated || null,
+                    data.terms || [],
+                    langCode
+                );
+                ui.showToast('Doctor\'s reply simplified ✓', 'success');
+            }
+            break;
+
+        case 'session_info':
+            // Live-update Session Info card counters
+            ui.updateSessionInfo(data.phrase_count, data.ai_requests);
             break;
 
         case 'summary':
@@ -228,14 +343,20 @@ function handleServerMessage(data) {
             setTimeout(() => { if (wsClient) { wsClient.disconnect(); wsClient = null; } }, 500);
             break;
 
+        case 'ai_error':
+            // Non-fatal AI error — show warning toast but keep session alive
+            ui.hideAiThinking();
+            ui.showToast(data.message || 'AI analysis unavailable for this phrase', 'warning');
+            break;
+
         case 'error':
+            // Fatal session error — show and reset
             ui.hideAiThinking();
             ui.showError(data.message || 'An error occurred');
-            setTimeout(() => resetSession(), 400);
+            setTimeout(() => resetSession(), 1500);
             break;
 
         case 'pong':
-            // Heartbeat — no action needed
             break;
 
         default:

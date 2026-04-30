@@ -68,23 +68,13 @@ def validate_session_id(session_id: str) -> bool:
 
 def validate_language_code(language: str) -> bool:
     """
-    Validate language code (ISO 639-1)
-    
-    Args:
-        language: Language code to validate
-    
-    Returns:
-        True if valid, False otherwise
-    
-    Requirements: 14.4
+    Validate language code (ISO 639-1).
+    Accepts any 2-3 character code to avoid blocking valid languages.
     """
-    # Common language codes
-    valid_languages = {
-        'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko',
-        'ar', 'hi', 'bn', 'pa', 'te', 'mr', 'ta', 'ur', 'gu', 'kn',
-        'ml', 'or', 'as', 'ne', 'si', 'my', 'km', 'lo', 'th', 'vi'
-    }
-    return language.lower() in valid_languages
+    if not language or not isinstance(language, str):
+        return False
+    # Accept any 2-3 letter ISO code rather than a hardcoded allowlist
+    return bool(re.match(r'^[a-z]{2,3}$', language.lower()))
 
 
 def validate_text_input(text: str, max_length: int = 10000) -> tuple[bool, str]:
@@ -219,7 +209,7 @@ def validate_websocket_message(message: Dict[str, Any]) -> tuple[bool, str]:
         return False, "Message must have a 'type' field"
     
     message_type = message.get("type")
-    valid_types = ["transcript", "end_session", "language_change", "ping"]
+    valid_types = ["transcript", "end_session", "language_change", "ping", "question_ask", "doctor_reply"]
     
     if message_type not in valid_types:
         return False, f"Invalid message type: {message_type}"
