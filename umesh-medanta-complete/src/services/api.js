@@ -1,5 +1,6 @@
 import { API_BASE } from './config'
-const B = `${API_BASE}/api`
+// Strip trailing slash to avoid double-slash in URLs
+const B = `${API_BASE.replace(/\/$/, '')}/api`
 const h = () => ({ 'Content-Type':'application/json', ...(localStorage.getItem('mc_token') ? { Authorization:`Bearer ${localStorage.getItem('mc_token')}` } : {}) })
 
 async function req(path, opts = {}) {

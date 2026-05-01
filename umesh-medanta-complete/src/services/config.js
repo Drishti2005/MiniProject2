@@ -1,7 +1,5 @@
-// Backend URL — set VITE_API_URL in Render environment variables
-// In dev: empty string (Vite proxy handles /api and /ws)
-// In production: https://sidekick-backend.onrender.com
-export const API_BASE = import.meta.env.VITE_API_URL || ''
+// Strip trailing slash from env var to prevent double-slash URLs
+export const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 export const WS_URL = () => {
   const base = import.meta.env.VITE_API_URL || ''
