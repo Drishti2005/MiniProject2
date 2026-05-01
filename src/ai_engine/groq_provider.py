@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 GROQ_MODEL  = "llama-3.3-70b-versatile"
 TEMPERATURE = 0.3
 MAX_TOKENS  = 1024
-API_TIMEOUT = 25
+API_TIMEOUT = 60   # increased for Render free tier cold starts
 
 
 class GroqProvider(BaseAIService):
