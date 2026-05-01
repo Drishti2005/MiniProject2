@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; }
+  body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+}
+
+@layer components {
+  .widget      { @apply bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden; }
+  .widget-hdr  { @apply flex items-center gap-3 px-4 py-3 border-b border-gray-100; }
+  .scroll-light { scrollbar-width: thin; scrollbar-color: #D0D5DD transparent; }
+  .scroll-light::-webkit-scrollbar { width: 4px; }
+  .scroll-light::-webkit-scrollbar-thumb { background: #D0D5DD; border-radius: 9999px; }
+}
+
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e4e4e4 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.8s linear infinite;
+  }
+}
