@@ -609,6 +609,58 @@ async def tts_proxy(text: str, lang: str = "hi"):
         raise HTTPException(status_code=502, detail="TTS unavailable")
 
 
+# ── Auth store (in-memory for demo — replace with DB in production) ──
+import bcrypt, secrets, time as _time
+_USERS: dict = {}   # email → { name, hashed_pw }
+_TOKENS: dict = {}  # token → { email, name, exp }
+
+def _hash(pw: str) -> str:
+    return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+
+def _verify(pw: str, hashed: str) -> bool:
+    try: return bcrypt.checkpw(pw.encode(), hashed.encode())
+    except: return False
+
+def _make_token(email: str, name: str) -> str:
+    tok = secrets.token_urlsafe(32)
+    _TOKENS[tok] = {"email": email, "name": name, "exp": _time.time() + 86400}
+    return tok
+
+class _SignupBody(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class _LoginBody(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/signup")
+async def auth_signup(body: _SignupBody):
+    if not body.name or not body.email or not body.password:
+        raise HTTPException(status_code=400, detail="All fields required")
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if body.email in _USERS:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    _USERS[body.email] = {"name": body.name, "hashed_pw": _hash(body.password)}
+    token = _make_token(body.email, body.name)
+    return {"token": token, "user": {"email": body.email, "name": body.name, "role": "Doctor"}}
+
+@app.post("/api/auth/login")
+async def auth_login(body: _LoginBody):
+    user = _USERS.get(body.email)
+    if not user or not _verify(body.password, user["hashed_pw"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    token = _make_token(body.email, user["name"])
+    return {"token": token, "user": {"email": body.email, "name": user["name"], "role": "Doctor"}}
+
+@app.get("/api/auth/me")
+async def auth_me(authorization: str = None):
+    from fastapi import Header
+    raise HTTPException(status_code=501, detail="Use token from login response")
+
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
