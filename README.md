@@ -125,6 +125,21 @@ See the task files for detailed implementation steps:
 - **AI**: Google Gemini API
 - **Database**: Supabase PostgreSQL
 
+- # 🚀 Live Deployment
+Frontend:  https://sidekick-frontend.onrender.com
+Backend API: https://sidekick-backend-a3ec.onrender.com
+## 📖 Project Overview
+Brief description of what the project does, its features, and tech stack.
+
+## 🛠️ Tech Stack
+- FastAPI (Backend)
+- React + Vite (Frontend)
+- Render (Deployment)
+- Sqlite (Database)
+
+## ⚙️ Setup Instructions
+Steps to run locally, install dependencies, and configure environment variables.
+
 ## License
 
 MIT
